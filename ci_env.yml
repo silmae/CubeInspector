@@ -1,0 +1,19 @@
+# Create environment with conda running:
+# conda env create -n ci --file ci_env.yml
+# Change "create" to "update" when updating.
+name: ci
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - numpy
+  - matplotlib
+  - toml
+  - ipython
+  - sphinx #API documentation
+  - pip
+  - pip:
+      - spectral # for image cube read and write
+      #- spectres # for resampling spectra
+      - pysimplegui

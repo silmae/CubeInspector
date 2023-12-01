@@ -1,0 +1,8 @@
+__pycache__/
+
+.vscode/
+.idea/
+
+# Exclude log files
+log*/* 
+
