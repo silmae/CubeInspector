@@ -4,6 +4,11 @@ import os
 import PySimpleGUI as sg
 import spectral.io.envi as envi
 import spectral as spy
+import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+matplotlib.use("TkAgg")
 
 
 # GUI entity keys
@@ -24,8 +29,8 @@ file_list_column = [
 
 image_viewer_column = [
     [sg.Text("Choose an ENVI cube directory from list on left:")],
-    [sg.Text(size=(40, 1), key="-TOUT-")],
-    [sg.Image(key="-IMAGE-")],
+    [sg.Canvas(key="-CANVAS-")],
+    [sg.Button("OK")]
 ]
 
 layout = [
@@ -36,7 +41,18 @@ layout = [
     ]
 ]
 
-window = sg.Window("Cube Inspector", layout=layout, margins=(500,300))
+window = sg.Window("Cube Inspector", layout=layout, margins=(500,300), finalize=True)
+
+
+def draw_figure(canvas, figure):
+    figure_canvas_agg = FigureCanvasTkAgg(figure, canvas)
+    figure_canvas_agg.draw()
+    figure_canvas_agg.get_tk_widget().pack(side="top", fill="both", expand=1)
+    return figure_canvas_agg
+
+
+fig = None
+cube_data = None
 
 while True:
     event, values = window.read()
@@ -75,6 +91,10 @@ while True:
                 hdr_path = os.path.join(cube_dir,hdr_file_name)
                 raw_path = os.path.join(cube_dir,raw_file_name)
                 cube_data = envi.open(file=hdr_path,image=raw_path)
+
+                # Add the plot to the window
+                # draw_figure(window["-CANVAS-"].TKCanvas, fig)
+
                 print(f"Cube meta: {cube_data.metadata}")
             else:
                 print(f"Not OK. Either hdr or raw file not found from given directory.")
@@ -87,3 +107,13 @@ while True:
         ]
 
         window[guiek_file_list].update(fnames)
+
+        pixel = cube_data.read_pixel(row=int(cube_data.nrows / 2), col=int(cube_data.ncols / 2))
+
+        fig = plt.figure(figsize=(5, 4), dpi=100)
+        fig.add_subplot(111).plot(pixel)
+        # Add the plot to the window
+        draw_figure(window["-CANVAS-"].TKCanvas, fig)
+
+
+window.close()
