@@ -9,6 +9,7 @@ Refreshing plot: https://gist.github.com/KenoLeon/e913de9e1fe690ebe287e6d1e54e3b
 """
 
 import os
+import math
 
 import PySimpleGUI as sg
 import spectral.io.envi as envi
@@ -40,18 +41,62 @@ def mouse_click_event(eventi):
     print('x: {} and y: {}'.format(eventi.xdata, eventi.ydata))
 
     # TODO inverted x and y coordinates. See if this is actually necessary.
-    y = eventi.xdata
-    x = eventi.ydata
+    # Store data in case there will be a drag
+    _VARS['rect_x_0'] = eventi.xdata
+    _VARS['rect_y_0'] = eventi.ydata
 
-    # Can be none if clicked outside of the image area.
-    # TODO check which canvas was cliced?
-    if x is not None and y is not None:
-        _VARS['fig_agg'].get_tk_widget().forget()
-        pixel = _VARS['cube_data'].read_pixel(row=int(x), col=int(y))
-        ax_px_plot.plot(pixel)
-        _VARS['fig_agg'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
-    else:
-        print(f"Mouse click out of image area.")
+
+def mouse_release_event(eventi):
+
+    if eventi.button == 1:
+        x0 = _VARS['rect_x_0']
+        y0 = _VARS['rect_y_0']
+
+        y = eventi.ydata
+        x = eventi.xdata
+
+        drag_treshold = 2 # pixels
+
+        # We have a drag if we have previously set (and not cleared) x0 and y0 and the release position is far enough away.
+        if (x0 is not None or y0 is not None) and (math.fabs(x0 - x) > drag_treshold or math.fabs(y0 - y) > drag_treshold):
+
+            print(f"Mouse dragged from ({x0}, {y0}) to ({x}, {y})")
+            drag_start_x = int(min(x, x0))
+            drag_start_y = int(min(y, y0))
+            drag_end_x = int(max(x, x0))
+            drag_end_y = int(max(y, y0))
+            rows = list(np.arange(start=drag_start_x, stop=drag_end_x, step=1))
+            cols = list(np.arange(start=drag_start_y, stop=drag_end_y, step=1))
+            print(f"Rows: {rows}")
+            print(f"Cols: {cols}")
+            sub_image = _VARS['cube_data'].read_subimage(rows=rows, cols=cols)
+
+            # sg.popup_ok(title="Wait a bit, I'm calculating..")
+            sub_mean = np.mean(sub_image, axis=(0,1))
+
+            print(f"len mean spectra: {len(sub_mean)}")
+
+            # Draw new plot and refersh canvas
+            _VARS['fig_agg'].get_tk_widget().forget()
+            ax_px_plot.plot(sub_mean)
+            _VARS['fig_agg'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
+
+
+        else:
+
+            print(f"We have a click at ({x},{y})")
+
+            # Else it was just a click and we can reset x0 and y0
+            _VARS['rect_x_0'] = None
+            _VARS['rect_y_0'] = None
+
+            # And do the normal click stuff
+            _VARS['fig_agg'].get_tk_widget().forget()
+            pixel = _VARS['cube_data'].read_pixel(row=int(y), col=int(x))
+            ax_px_plot.plot(pixel)
+            _VARS['fig_agg'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
+
+    print(f"Mouse button {eventi.button} released at ({x},{y})")
 
 
 def update_false_color_canvas():
@@ -134,7 +179,8 @@ def open_cube(user_selected_file_path):
         # Draw cube to canvas
         update_false_color_canvas()
         # Connect mouse click
-        cid = fig_false_color.canvas.mpl_connect('button_press_event', mouse_click_event)
+        cid_press = fig_false_color.canvas.mpl_connect('button_press_event', mouse_click_event)
+        cid_release = fig_false_color.canvas.mpl_connect('button_release_event', mouse_release_event)
 
 
     else:
@@ -216,12 +262,17 @@ _VARS = {'window': window,
          'cube_data': None,
          'cube_wls': None,
          'cube_bands': None,
+         'rect_x_0': None,
+         'rect_y_0': None,
+         'rect_x_1': None,
+         'rect_y_1': None,
          }
 
 
 # Infinite GUI loop
 while True:
     event, values = window.read()
+    print(f"event {event}, values: {values}")
 
     if event == "Exit" or event == sg.WIN_CLOSED:
         break
