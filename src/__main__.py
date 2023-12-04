@@ -17,9 +17,11 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.ticker import AutoMinorLocator
+
 matplotlib.use("TkAgg")
 
-
+# Set a nice color theme
 sg.theme('dark grey 9')
 
 
@@ -45,7 +47,7 @@ def mouse_click_event(eventi):
     # TODO check which canvas was cliced?
     if x is not None and y is not None:
         _VARS['fig_agg'].get_tk_widget().forget()
-        pixel = _VARS['cuba_data'].read_pixel(row=int(x), col=int(y))
+        pixel = _VARS['cube_data'].read_pixel(row=int(x), col=int(y))
         ax_px_plot.plot(pixel)
         _VARS['fig_agg'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
     else:
@@ -54,31 +56,48 @@ def mouse_click_event(eventi):
 
 def update_false_color_canvas():
     _VARS['fig_agg_false_color'].get_tk_widget().forget()
-    cube_data = _VARS['cuba_data']
+    cube_data = _VARS['cube_data']
     default_bands = [int(band) - 1 for band in cube_data.metadata['default bands']]
     false_color_rgb = cube_data.read_bands(bands=default_bands)
 
     ######## False color canvas
     ax_false_color.imshow(false_color_rgb)
+    ax_false_color.set_xlabel('samples')
+    ax_false_color.set_ylabel('lines')
+
     _VARS['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
 
+
+def cube_meta():
+
+    cube_data = _VARS['cube_data']
     for key,value in cube_data.metadata.items():
-        if key == 'wavelength' or key == 'fwhm':
+        if key == 'wavelength':
+            _VARS['cube_wls'] = np.array(list(float(v) for v in value))
+            # print(_VARS['cube_wls'])
+            _VARS['cube_bands'] = np.arange(start=0, stop=len(value), step=1)
+            # print(f"len wls: {len(_VARS['cube_wls'])}")
+            # print(f"len bands: {len(_VARS['cube_bands'])}")
+        elif key == 'fwhm':
             continue
         else:
             window[guiek_cube_meta_text].print(f"{key}: {value}")
 
+    ax_px_plot.set_xlabel('Band')
+    bands = _VARS['cube_bands']
+    wls = _VARS['cube_wls']
 
-def clear_plot():
-    """Clear pixel plot.
+    ax_px_plot.set_xlim(bands[0], bands[-1])
 
-    TODO maybe make more general to clear any pyplot axis?
-    """
+    def forward(x):
+        return np.interp(x, bands, wls)
 
-    print(f"Clearing pixel plot")
-    _VARS['fig_agg'].get_tk_widget().forget()
-    ax_px_plot.clear()
-    _VARS['fig_agg'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
+    def inverse(x):
+        return np.interp(x, wls, bands)
+
+    # FIXME the wavelength axis is not perfect as two figures are shown at the extremes
+    secax = ax_px_plot.secondary_xaxis('top', functions=(forward, inverse))
+    secax.set_xlabel(r"Wavelength [$nm$]")
 
 
 def open_cube(user_selected_file_path):
@@ -107,14 +126,31 @@ def open_cube(user_selected_file_path):
         hdr_path = os.path.join(selected_dir_path, hdr_file_name)
         raw_path = os.path.join(selected_dir_path, raw_file_name)
         cube_data = envi.open(file=hdr_path, image=raw_path)
-        _VARS['cuba_data'] = cube_data
+        _VARS['cube_data'] = cube_data
+
+        # First set things up using metadata
+        cube_meta()
+
         # Draw cube to canvas
         update_false_color_canvas()
         # Connect mouse click
         cid = fig_false_color.canvas.mpl_connect('button_press_event', mouse_click_event)
 
+
     else:
         print(f"Not OK. Either hdr or raw file not found from given directory.")
+
+
+def clear_plot():
+    """Clear pixel plot.
+
+    TODO maybe make more general to clear any pyplot axis?
+    """
+
+    print(f"Clearing pixel plot")
+    _VARS['fig_agg'].get_tk_widget().forget()
+    ax_px_plot.clear()
+    _VARS['fig_agg'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
 
 
 # GUI entity keys
@@ -178,6 +214,8 @@ _VARS = {'window': window,
          'fig_agg_false_color': draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color),
          'pltFig': False,
          'cube_data': None,
+         'cube_wls': None,
+         'cube_bands': None,
          }
 
 
