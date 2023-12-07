@@ -17,8 +17,10 @@ import spectral as spy
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.ticker import AutoMinorLocator
+import toml_handling as TH
 
 matplotlib.use("TkAgg")
 
@@ -69,18 +71,40 @@ def mouse_release_event(eventi):
             cols = list(np.arange(start=drag_start_y, stop=drag_end_y, step=1))
             print(f"Rows: {rows}")
             print(f"Cols: {cols}")
-            sub_image = _VARS['cube_data'].read_subimage(rows=rows, cols=cols)
+
+            # So for some reason, when reading from image array, rows and colums are inverted
+            # (compared to when reading from 'cube_data').
+            sub_image = _VARS['img_array'].read_subimage(rows=cols, cols=rows)
 
             # sg.popup_ok(title="Wait a bit, I'm calculating..")
             sub_mean = np.mean(sub_image, axis=(0,1))
+            sub_std = np.std(sub_image, axis=(0,1))
 
             print(f"len mean spectra: {len(sub_mean)}")
 
             # Draw new plot and refersh canvas
             _VARS['fig_agg'].get_tk_widget().forget()
             ax_px_plot.plot(sub_mean)
+            ax_px_plot.fill_between(_VARS['cube_bands'], sub_mean - (sub_std / 2), sub_mean + (sub_std / 2), alpha=0.2)
             _VARS['fig_agg'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
 
+            # Draw rectangle over RGB canvas and refresh
+            width = math.fabs(drag_start_x - drag_end_x)
+            height = math.fabs(drag_start_y - drag_end_y)
+            _VARS['fig_agg_false_color'].get_tk_widget().forget()
+            handle = ax_false_color.add_patch(Rectangle((drag_start_x, drag_start_y), width=width, height=height, fill=False, edgecolor='gray'))
+            _VARS['rectangle_handles'].append(handle)
+            _VARS['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
+
+            if _VARS['selecting_white']:
+                answer = sg.popup_yes_no("Do you want to save selected mean spectra as white reference?")
+                if answer == 'Yes':
+                    _VARS['white_spectra'] = sub_mean
+
+            if _VARS['selecting_dark']:
+                answer = sg.popup_yes_no("Do you want to save selected mean spectra as dark reference?")
+                if answer == 'Yes':
+                    _VARS['dark_spectra'] = sub_mean
 
         else:
 
@@ -92,9 +116,15 @@ def mouse_release_event(eventi):
 
             # And do the normal click stuff
             _VARS['fig_agg'].get_tk_widget().forget()
-            pixel = _VARS['cube_data'].read_pixel(row=int(y), col=int(x))
+            pixel = _VARS['img_array'].read_pixel(row=int(y), col=int(x))
             ax_px_plot.plot(pixel)
             _VARS['fig_agg'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
+
+            # Draw click location as a dot
+            _VARS['fig_agg_false_color'].get_tk_widget().forget()
+            handle = ax_false_color.scatter(int(x), int(y))
+            _VARS['dot_handles'].append(handle)
+            _VARS['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
 
     print(f"Mouse button {eventi.button} released at ({x},{y})")
 
@@ -103,6 +133,7 @@ def update_false_color_canvas():
     _VARS['fig_agg_false_color'].get_tk_widget().forget()
     cube_data = _VARS['cube_data']
     default_bands = [int(band) - 1 for band in cube_data.metadata['default bands']]
+    # This can be read from the cube data and not img_array
     false_color_rgb = cube_data.read_bands(bands=default_bands)
 
     ######## False color canvas
@@ -148,8 +179,9 @@ def cube_meta():
 def open_cube(user_selected_file_path):
     selected_dir_path = os.path.dirname(user_selected_file_path)
     selected_file_name = os.path.basename(user_selected_file_path)
+    base_name = selected_file_name.rsplit(sep='.',maxsplit=1)[0]
 
-    print(f"File: '{selected_file_name}' in '{selected_dir_path}'.")
+    print(f"File: '{selected_file_name}' in '{selected_dir_path}'. Base name is '{base_name}'.")
 
     hdr_found = False
     raw_found = False
@@ -158,11 +190,11 @@ def open_cube(user_selected_file_path):
 
     file_list = os.listdir(selected_dir_path)
     for file_name in file_list:
-        if file_name.endswith(".hdr"):
+        if file_name.endswith(".hdr") and file_name.startswith(base_name):
             hdr_found = True
             hdr_file_name = file_name
         # TODO check for .img (alias for raw, apparently)
-        if file_name.endswith(".raw"):
+        if file_name.endswith(".raw") and file_name.startswith(base_name):
             raw_found = True
             raw_file_name = file_name
 
@@ -170,8 +202,12 @@ def open_cube(user_selected_file_path):
         print(f"Envi cube files OK. ")
         hdr_path = os.path.join(selected_dir_path, hdr_file_name)
         raw_path = os.path.join(selected_dir_path, raw_file_name)
+
         cube_data = envi.open(file=hdr_path, image=raw_path)
+        img_array = cube_data.load()
+
         _VARS['cube_data'] = cube_data
+        _VARS['img_array'] = img_array
 
         # First set things up using metadata
         cube_meta()
@@ -198,9 +234,39 @@ def clear_plot():
     ax_px_plot.clear()
     _VARS['fig_agg'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
 
+    print(f"Clearing false color RGB")
+    # Remove rectangles and other Artists
+    # while ax_false_color.patches:
+    #     ax_false_color.patches[0].remove()
+    for handle in _VARS['rectangle_handles']:
+        handle.remove()
+    for handle in _VARS['dot_handles']:
+        handle.remove()
+        
+    _VARS['rectangle_handles'] = []
+    _VARS['dot_handles'] = []
+    update_false_color_canvas()
+
+
+state_dir_path = os.getcwd()
+state_file_name = "ci_state"
+
+
+def state_save():
+    TH.write_dict_as_toml(dictionary=_VARS, directory=state_dir_path, filename=state_file_name)
+
+
+def state_load():
+    state = TH.read_toml_as_dict(directory=state_dir_path, filename=state_file_name)
+    return state
+
 
 # GUI entity keys
-guiek_cube_file_selected = "-DIR-"
+guiek_cube_file_selected = "-CUBE SELECT-"
+guiek_dark_file_selected = "-DARK SELECT-"
+guiek_white_file_selected = "-WHITE SELECT-"
+guiek_calc_dark = "-CALCULATE DARK-"
+guiek_calc_white = "-CALCULATE WHITE-"
 guiek_cube_false_color = "-FALSE COLOR-"
 guiek_pixel_plot_canvas = "-PX PLOT CANVAS-"
 guiek_cube_meta_text = "-CUBE META-"
@@ -213,6 +279,7 @@ ax_px_plot = fig_px_plot.add_subplot(111)
 fig_false_color = plt.figure(figsize=(5, 4), dpi=100)
 ax_false_color = fig_false_color.add_subplot(111)
 
+
 cube_meta_column = [
     [
         sg.Text("This ought to contain metadata"),
@@ -224,10 +291,21 @@ cube_meta_column = [
 
 cube_column = [
     [
-        sg.Text("Select ENVI cube directory"),
+        sg.Text("Cube"),
         sg.In(size=(25, 1), enable_events=True, key=guiek_cube_file_selected),
-        # sg.FolderBrowse(),
-        sg.FileBrowse()
+        sg.FileBrowse(),
+    ],
+    [
+        sg.Text("Dark"),
+        sg.In(size=(25, 1), enable_events=True, key=guiek_dark_file_selected),
+        sg.FileBrowse(),
+        sg.Button("Calculate", k=guiek_calc_dark),
+    ],
+    [
+        sg.Text("White"),
+        sg.In(size=(25, 1), enable_events=True, key=guiek_white_file_selected),
+        sg.FileBrowse(),
+        sg.Button("Calculate", k=guiek_calc_white),
     ],
     [
         # sg.Listbox(values=[], enable_events=True, size=(80, 20), key=guiek_file_list)
@@ -254,34 +332,66 @@ layout = [
 
 window = sg.Window("Cube Inspector", layout=layout, margins=(500,300), finalize=True)
 
+# try:
+#     _STATE = state_load()
+# except FileNotFoundError as e:
+#
+#     print(f"Could not find state file. Initializing with defaults.")
+
+
 # Keep most of the global stuff in this single dictionary for later access
 _VARS = {'window': window,
          'fig_agg': draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot),
          'fig_agg_false_color': draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color),
          'pltFig': False,
          'cube_data': None,
+         'img_array': None,
          'cube_wls': None,
          'cube_bands': None,
          'rect_x_0': None,
          'rect_y_0': None,
          'rect_x_1': None,
          'rect_y_1': None,
+
+         'rectangle_handles': [],
+         'dot_handles': [],
+
+         'selecting_white': False,
+         'selecting_dark': False,
+
+         'white_spectra': None,
+         'dark_spectra': None,
          }
 
 
-# Infinite GUI loop
-while True:
-    event, values = window.read()
-    print(f"event {event}, values: {values}")
+def main():
+    # Infinite GUI loop
+    while True:
+        event, values = window.read()
+        print(f"event {event}, values: {values}")
 
-    if event == "Exit" or event == sg.WIN_CLOSED:
-        break
+        if event == "Exit" or event == sg.WIN_CLOSED:
+            break
 
-    if event == "Clear":
-        clear_plot()
+        if event == "Clear":
+            clear_plot()
 
-    if event == guiek_cube_file_selected:
-        open_cube(values[guiek_cube_file_selected])
+        if event == guiek_cube_file_selected:
+            _VARS['selecting_white'] = False
+            _VARS['selecting_dark'] = False
+            open_cube(values[guiek_cube_file_selected])
+
+        if event == guiek_white_file_selected:
+            _VARS['selecting_white'] = True
+            open_cube(values[guiek_white_file_selected])
+
+        if event == guiek_dark_file_selected:
+            _VARS['selecting_dark'] = True
+            open_cube(values[guiek_dark_file_selected])
+
+    # state_save()
+    window.close()
 
 
-window.close()
+if __name__ == '__main__':
+    main()
