@@ -6,3 +6,5 @@ __pycache__/
 # Exclude log files
 log*/* 
 
+src*/ci_state.toml
+
