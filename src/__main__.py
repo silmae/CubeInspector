@@ -74,7 +74,8 @@ def mouse_release_event(eventi):
 
             # So for some reason, when reading from image array, rows and colums are inverted
             # (compared to when reading from 'cube_data').
-            sub_image = _VARS['img_array'].read_subimage(rows=cols, cols=rows)
+            # sub_image = _VARS['img_array'].read_subimage(rows=cols, cols=rows)
+            sub_image = _VARS['img_array'][rows][:, cols]
 
             # sg.popup_ok(title="Wait a bit, I'm calculating..")
             sub_mean = np.mean(sub_image, axis=(0,1))
@@ -96,18 +97,26 @@ def mouse_release_event(eventi):
             _VARS['rectangle_handles'].append(handle)
             _VARS['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
 
-            if _VARS['selecting_white']:
-                answer = sg.popup_yes_no("Do you want to save selected mean spectra as white reference?")
-                if answer == 'Yes':
-                    _VARS['white_spectra'] = sub_mean
-
             if _VARS['selecting_dark']:
-                answer = sg.popup_yes_no("Do you want to save selected mean spectra as dark reference?")
-                if answer == 'Yes':
-                    _VARS['dark_spectra'] = sub_mean
+                # answer = sg.popup_yes_no("Do you want to save selected mean spectra as dark reference?")
+                # if answer == 'Yes':
+                _VARS['dark_spectra'] = np.median(sub_image, axis=(0,1))
+                _VARS['dark_spectra'] = 1
+                _VARS['selecting_dark'] = False
+                print(f"Dark spectrum saved.")
+                # del answer
+            elif _VARS['selecting_white']:
+                # answer = sg.popup_yes_no("Do you want to save selected mean spectra as white reference?")
+                # if answer == 'Yes':
+                _VARS['white_spectra'] = sub_mean
+                _VARS['white_spectra'] = 1
+                _VARS['selecting_white'] = False
+                print(f"White spectrum saved.")
+                # del answer
+            else:
+                print(f"No selecting anything")
 
         else:
-
             print(f"We have a click at ({x},{y})")
 
             # Else it was just a click and we can reset x0 and y0
@@ -116,7 +125,8 @@ def mouse_release_event(eventi):
 
             # And do the normal click stuff
             _VARS['fig_agg'].get_tk_widget().forget()
-            pixel = _VARS['img_array'].read_pixel(row=int(y), col=int(x))
+            # pixel = _VARS['img_array'].read_pixel(row=int(y), col=int(x))
+            pixel = _VARS['img_array'][int(y), int(x)]
             ax_px_plot.plot(pixel)
             _VARS['fig_agg'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
 
@@ -133,8 +143,18 @@ def update_false_color_canvas():
     _VARS['fig_agg_false_color'].get_tk_widget().forget()
     cube_data = _VARS['cube_data']
     default_bands = [int(band) - 1 for band in cube_data.metadata['default bands']]
-    # This can be read from the cube data and not img_array
-    false_color_rgb = cube_data.read_bands(bands=default_bands)
+
+    if _VARS['selecting_dark']:
+        false_color_rgb = _VARS['img_array_dark'][:,:,default_bands].astype(np.uint16)
+    elif _VARS['selecting_white']:
+        false_color_rgb = _VARS['img_array_white'][:,:,default_bands].astype(np.uint16)
+    else:
+        # false_color_rgb = cube_data.read_bands(bands=default_bands)
+        # false_color_rgb = _VARS['img_array'].read_bands(bands=default_bands).astype(np.uint16)
+        if _VARS['white_corrected']:
+            false_color_rgb = _VARS['img_array'][:, :, default_bands].astype(np.float32)
+        else:
+            false_color_rgb = _VARS['img_array'][:,:,default_bands].astype(np.uint16)
 
     ######## False color canvas
     ax_false_color.imshow(false_color_rgb)
@@ -204,23 +224,73 @@ def open_cube(user_selected_file_path):
         raw_path = os.path.join(selected_dir_path, raw_file_name)
 
         cube_data = envi.open(file=hdr_path, image=raw_path)
-        img_array = cube_data.load()
+        img_array = cube_data.load().asarray()
 
-        _VARS['cube_data'] = cube_data
-        _VARS['img_array'] = img_array
+        if not _VARS['selecting_dark'] and not _VARS['selecting_white']:
 
-        # First set things up using metadata
-        cube_meta()
+            _VARS['cube_data'] = cube_data
+            _VARS['img_array'] = img_array
+
+            # First set things up using metadata
+            cube_meta()
+
+            # Connect mouse click
+            cid_press = fig_false_color.canvas.mpl_connect('button_press_event', mouse_click_event)
+            cid_release = fig_false_color.canvas.mpl_connect('button_release_event', mouse_release_event)
+        elif _VARS['selecting_dark']:
+            _VARS['img_array_dark'] = img_array
+        elif _VARS['selecting_white']:
+            _VARS['img_array_white'] = img_array
+        else:
+            print(f"WARNING: WE SHOULD NOT BE HERE!!")
 
         # Draw cube to canvas
         update_false_color_canvas()
-        # Connect mouse click
-        cid_press = fig_false_color.canvas.mpl_connect('button_press_event', mouse_click_event)
-        cid_release = fig_false_color.canvas.mpl_connect('button_release_event', mouse_release_event)
-
 
     else:
         print(f"Not OK. Either hdr or raw file not found from given directory.")
+
+
+def calc_dark():
+
+    print(f"Dark calculation called...")
+
+    if _VARS['img_array'] is None:
+        print(f"Cannot calculate dark because image array is None. Select a cube first.")
+        return
+
+    dark_spectrum = _VARS['dark_spectra']
+    if dark_spectrum is None:
+        print(f"Cannot calculate dark because dark spectrum is None. Select a region from a dark cube first.")
+        return
+
+    # FIXME subtract the MEDIAN of the dark. Not the mean
+    _VARS['img_array'] = _VARS['img_array'] - dark_spectrum
+    _VARS['img_array'] = np.clip(_VARS['img_array'], a_min=0, a_max=None)
+    _VARS['img_array'] = _VARS['img_array']
+
+    update_false_color_canvas()
+
+
+def calc_white():
+
+    print(f"White calculation called...")
+
+    # img_array = _VARS['img_array']
+    if _VARS['img_array'] is None:
+        print(f"Cannot calculate dark because image array is None. Select a cube first.")
+        return
+
+    white_spectrum = _VARS['white_spectra']
+    if white_spectrum is None:
+        print(f"Cannot calculate dark because dark spectrum is None. Select a region from a dark cube first.")
+        return
+
+    _VARS['img_array'] = np.divide(_VARS['img_array'], white_spectrum, dtype=np.float32)
+    _VARS['white_corrected'] = True
+    # _VARS['img_array'] = img_array
+
+    update_false_color_canvas()
 
 
 def clear_plot():
@@ -242,7 +312,7 @@ def clear_plot():
         handle.remove()
     for handle in _VARS['dot_handles']:
         handle.remove()
-        
+
     _VARS['rectangle_handles'] = []
     _VARS['dot_handles'] = []
     update_false_color_canvas()
@@ -346,6 +416,9 @@ _VARS = {'window': window,
          'pltFig': False,
          'cube_data': None,
          'img_array': None,
+         'img_array_dark': None,
+         'img_array_white': None,
+         'white_corrected': False,
          'cube_wls': None,
          'cube_bands': None,
          'rect_x_0': None,
@@ -388,6 +461,14 @@ def main():
         if event == guiek_dark_file_selected:
             _VARS['selecting_dark'] = True
             open_cube(values[guiek_dark_file_selected])
+
+        if event == guiek_calc_dark:
+            print(f"Dark button press")
+            calc_dark()
+
+        if event == guiek_calc_white:
+            print(f"White button press")
+            calc_white()
 
     # state_save()
     window.close()
