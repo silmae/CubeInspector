@@ -142,26 +142,66 @@ def mouse_release_event(eventi):
 
 
 def update_false_color_canvas():
-    cube_data = _RUNTIME['cube_data']
 
-    if cube_data is None:
-        return
+    # default_bands = [int(band) - 1 for band in cube_data.metadata['default bands']]
+    default_bands = (_RUNTIME['band_R'], _RUNTIME['band_G'], _RUNTIME['band_B'])
 
-    _RUNTIME['fig_agg_false_color'].get_tk_widget().forget()
-    default_bands = [int(band) - 1 for band in cube_data.metadata['default bands']]
+    if default_bands[0]==0 and default_bands[1]==0 and default_bands[2]==0:
+        print(f"Trying to get RGB bands from HDR file.")
+        if _RUNTIME['cube_data'] is not None:
+            default_bands = [int(band) - 1 for band in _RUNTIME['cube_data'].metadata['default bands']]
 
-    if _RUNTIME['selecting_dark']:
-        false_color_rgb = _RUNTIME['img_array_dark'][:, :, default_bands].astype(np.uint16)
-    elif _RUNTIME['selecting_white']:
-        false_color_rgb = _RUNTIME['img_array_white'][:, :, default_bands].astype(np.uint16)
-    else:
-        # false_color_rgb = cube_data.read_bands(bands=default_bands)
-        # false_color_rgb = _VARS['img_array'].read_bands(bands=default_bands).astype(np.uint16)
+    _RUNTIME['band_R'] = default_bands[0]
+    _RUNTIME['band_G'] = default_bands[1]
+    _RUNTIME['band_B'] = default_bands[2]
+
+    print(f"RGB: {default_bands}")
+
+    view_mode = _RUNTIME['view_mode']
+
+    if view_mode == 'cube' and not _RUNTIME['selecting_dark'] and not _RUNTIME['selecting_white']:
+        if _RUNTIME['img_array'] is None:
+            print(f"Image array None. Nothing to show.")
+            return
+
         if _RUNTIME['white_corrected']:
             false_color_rgb = _RUNTIME['img_array'][:, :, default_bands].astype(np.float32)
         else:
             false_color_rgb = _RUNTIME['img_array'][:, :, default_bands].astype(np.uint16)
 
+    elif view_mode == 'dark' or _RUNTIME['selecting_dark']:
+
+        if _RUNTIME['img_array_dark'] is None:
+            print(f"Image array None. Nothing to show.")
+            return
+
+        false_color_rgb = _RUNTIME['img_array_dark'][:, :, default_bands].astype(np.uint16)
+
+    elif view_mode == 'white' or _RUNTIME['selecting_white']:
+
+        if _RUNTIME['img_array_white'] is None:
+            print(f"Image array None. Nothing to show.")
+            return
+
+        false_color_rgb = _RUNTIME['img_array_white'][:, :, default_bands].astype(np.uint16)
+    else:
+        print(f"WARNING: unknown view mode '{view_mode}' and/or selection combination selecting "
+              f"dark={_RUNTIME['selecting_dark']}, white={_RUNTIME['selecting_white']}.")
+        return
+
+    # if _RUNTIME['selecting_dark']:
+    #     false_color_rgb = _RUNTIME['img_array_dark'][:, :, default_bands].astype(np.uint16)
+    # elif _RUNTIME['selecting_white']:
+    #     false_color_rgb = _RUNTIME['img_array_white'][:, :, default_bands].astype(np.uint16)
+    # else:
+    #     # false_color_rgb = cube_data.read_bands(bands=default_bands)
+    #     # false_color_rgb = _VARS['img_array'].read_bands(bands=default_bands).astype(np.uint16)
+    #     if _RUNTIME['white_corrected']:
+    #         false_color_rgb = _RUNTIME['img_array'][:, :, default_bands].astype(np.float32)
+    #     else:
+    #         false_color_rgb = _RUNTIME['img_array'][:, :, default_bands].astype(np.uint16)
+
+    _RUNTIME['fig_agg_false_color'].get_tk_widget().forget()
     ######## False color canvas
     ax_false_color.imshow(false_color_rgb)
     ax_false_color.set_xlabel('samples')
@@ -361,6 +401,11 @@ state_file_name = "ci_state"
 
 
 def state_save():
+
+    _STATE['band_R'] = _RUNTIME['band_R']
+    _STATE['band_G'] = _RUNTIME['band_G']
+    _STATE['band_B'] = _RUNTIME['band_B']
+
     TH.write_dict_as_toml(dictionary=_STATE, directory=state_dir_path, filename=state_file_name)
     print(f"State saved")
 
@@ -370,6 +415,15 @@ def state_load():
     for key, value in state.items():
         _STATE[key] = value
 
+    _RUNTIME['band_R'] = _STATE['band_R']
+    _RUNTIME['band_G'] = _STATE['band_G']
+    _RUNTIME['band_B'] = _STATE['band_B']
+
+    #We have _RUNTIME at this point so we can update the RGB inboxes as well
+    window[guiek_r_input].update(str(_RUNTIME['band_R']))
+    window[guiek_g_input].update(str(_RUNTIME['band_G']))
+    window[guiek_b_input].update(str(_RUNTIME['band_B']))
+
 
 # GUI entity keys
 guiek_cube_file_selected = "-CUBE SELECT-"
@@ -378,6 +432,18 @@ guiek_white_file_selected = "-WHITE SELECT-"
 guiek_cube_show_filename = "-CUBE SHOW FILENAME-"
 guiek_dark_show_filename = "-DARK SHOW FILENAME-"
 guiek_white_show_filename = "-WHITE SHOW FILENAME-"
+
+# For show buttons
+guiek_cube_show_button = "-CUBE SHOW BUTTON-"
+guiek_dark_show_button = "-DARK SHOW BUTTON-"
+guiek_white_show_button = "-WHITE SHOW BUTTON-"
+
+# RGB selection
+guiek_r_input = "-R-"
+guiek_g_input = "-G-"
+guiek_b_input = "-B-"
+guiek_rgb_update_button = "-RGB UPDATE BUTTON-"
+
 guiek_calc_dark = "-CALCULATE DARK-"
 guiek_calc_white = "-CALCULATE WHITE-"
 guiek_cube_false_color = "-FALSE COLOR-"
@@ -407,23 +473,35 @@ cube_column = [
         sg.Text("Cube"),
         sg.In(size=(25, 1), enable_events=True, key=guiek_cube_show_filename, disabled=True, text_color='black'),
         sg.FileBrowse(key=guiek_cube_file_selected, target=guiek_cube_file_selected, enable_events=True,),
+        sg.Button('Show', enable_events=True, key=guiek_cube_show_button),
     ],
     [
         sg.Text("Dark"),
         sg.In(size=(25, 1), enable_events=True, key=guiek_dark_show_filename, disabled=True, text_color='black'),
         sg.FileBrowse(key=guiek_dark_file_selected, target=guiek_dark_file_selected, enable_events=True,),
+        sg.Button('Show', enable_events=True, key=guiek_dark_show_button),
         sg.Button("Calculate", k=guiek_calc_dark),
     ],
     [
         sg.Text("White"),
         sg.In(size=(25, 1), enable_events=True, key=guiek_white_show_filename, disabled=True, text_color='black', background_color='grey'),
         sg.FileBrowse(key=guiek_white_file_selected, target=guiek_white_file_selected, enable_events=True,),
+        sg.Button('Show', enable_events=True, key=guiek_white_show_button),
         sg.Button("Calculate", k=guiek_calc_white),
     ],
     [
         # sg.Listbox(values=[], enable_events=True, size=(80, 20), key=guiek_file_list)
         # sg.Text("Cube false color"),
         sg.Canvas(key=guiek_cube_false_color),
+    ],
+    [
+        sg.Text("R"),
+        sg.In(size=(5, 1), key=guiek_r_input),
+        sg.Text("G"),
+        sg.In(size=(5, 1), key=guiek_g_input),
+        sg.Text("B"),
+        sg.In(size=(5, 1), key=guiek_b_input),
+        sg.Button('Update', enable_events=True, key=guiek_rgb_update_button)
     ],
 ]
 
@@ -476,10 +554,16 @@ _RUNTIME = {
     'selecting_white': False,
     'selecting_dark': False,
 
+    'view_mode': None, # 'cube', 'dark', 'white' or None
+
     'white_spectra': None,
     'dark_spectra': None,
 
     'mouse_handlers_connected': False,
+
+    'band_B': 0,
+    'band_G': 0,
+    'band_R': 0,
 }
 
 
@@ -515,9 +599,13 @@ def restore_from_previous_session():
     if _STATE['white_cube_hdr_path'] is not None:
         window[guiek_white_show_filename].update(value=get_base_name_wo_postfix(_STATE['white_cube_hdr_path']))
 
-    open_cube(hdr_path=_STATE['main_cube_hdr_path'], data_path=_STATE['main_cube_data_path'])
+    _RUNTIME['selecting_dark'] = True
     open_cube(hdr_path=_STATE['dark_cube_hdr_path'], data_path=_STATE['dark_cube_data_path'])
+    _RUNTIME['selecting_dark'] = False
+    _RUNTIME['selecting_white'] = True
     open_cube(hdr_path=_STATE['white_cube_hdr_path'], data_path=_STATE['white_cube_data_path'])
+    _RUNTIME['selecting_white'] = False
+    open_cube(hdr_path=_STATE['main_cube_hdr_path'], data_path=_STATE['main_cube_data_path'])
 
     update_false_color_canvas()
 
@@ -547,12 +635,28 @@ def main():
         if event == guiek_dark_file_selected:
             window[guiek_dark_show_filename].update(value=get_base_name_wo_postfix(values[guiek_dark_file_selected]))
             _RUNTIME['selecting_dark'] = True
+
             find_cube(values[guiek_dark_file_selected])
 
         if event == guiek_white_file_selected:
             window[guiek_white_show_filename].update(value=get_base_name_wo_postfix(values[guiek_white_file_selected]))
             _RUNTIME['selecting_white'] = True
             find_cube(values[guiek_white_file_selected])
+
+        if event == guiek_cube_show_button:
+            _RUNTIME['view_mode'] = 'cube'
+            print(f"Cube show button press")
+            update_false_color_canvas()
+
+        if event == guiek_dark_show_button:
+            _RUNTIME['view_mode'] = 'dark'
+            print(f"Dark show button press")
+            update_false_color_canvas()
+
+        if event == guiek_white_show_button:
+            _RUNTIME['view_mode'] = 'white'
+            print(f"White show button press")
+            update_false_color_canvas()
 
         if event == guiek_calc_dark:
             print(f"Dark button press")
@@ -561,6 +665,16 @@ def main():
         if event == guiek_calc_white:
             print(f"White button press")
             calc_white()
+
+        if event == guiek_rgb_update_button:
+            print(f"RGB update button pressed")
+            try:
+                _RUNTIME['band_R'] = int(values[guiek_r_input])
+                _RUNTIME['band_G'] = int(values[guiek_g_input])
+                _RUNTIME['band_B'] = int(values[guiek_b_input])
+                update_false_color_canvas()
+            except ValueError as ve:
+                print(f"Failed to cast to int.")
 
     state_save()
     window.close()
