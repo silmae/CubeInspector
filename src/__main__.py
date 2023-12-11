@@ -104,6 +104,8 @@ def mouse_release_event(eventi):
                 # if answer == 'Yes':
                 # FIXME Apparently, we cannot raise a popup iside a Matplotlib event without freezing the UI.
 
+                # FIXME This is wrong! Should take every line from the whole image and calculate median over scanned lines.
+                #   It is not a spectrum, but a 2d array that is subtracted from each line in the actual cube.
                 _RUNTIME['dark_spectra'] = np.median(sub_image, axis=(0, 1))
                 _RUNTIME['dark_spectra'] = 1
                 _RUNTIME['selecting_dark'] = False
@@ -159,6 +161,33 @@ def update_false_color_canvas():
 
     view_mode = _RUNTIME['view_mode']
 
+    def autoscale_int_image(image: np.array) -> np.array:
+
+        cmax = np.max(image)
+        print(f"Cube max value: {cmax} in autoscale.")
+
+        if cmax > 255:
+            print(f"Autoscaling false color image.")
+            autoscaled = np.divide(image, cmax)
+            autoscaled = autoscaled * 255
+            autoscaled = autoscaled.astype(np.uint16)
+            return autoscaled
+        else:
+            return image.astype(np.uint16)
+
+    def autoscale_float_image(image: np.array) -> np.array:
+        """Not sure if this is even needed because we should have white reference."""
+
+        cmax = np.max(image)
+        print(f"Cube max value: {cmax} in autoscale.")
+
+        if cmax > 1.0:
+            print(f"Autoscaling false color image.")
+            autoscaled = np.divide(image, cmax, dtype=np.float32)
+            return autoscaled
+        else:
+            return image.astype(np.float32)
+
     if view_mode == 'cube' and not _RUNTIME['selecting_dark'] and not _RUNTIME['selecting_white']:
         if _RUNTIME['img_array'] is None:
             print(f"Image array None. Nothing to show.")
@@ -168,6 +197,7 @@ def update_false_color_canvas():
             false_color_rgb = _RUNTIME['img_array'][:, :, default_bands].astype(np.float32)
         else:
             false_color_rgb = _RUNTIME['img_array'][:, :, default_bands].astype(np.uint16)
+            false_color_rgb = autoscale_int_image(false_color_rgb)
 
     elif view_mode == 'dark' or _RUNTIME['selecting_dark']:
 
@@ -176,6 +206,7 @@ def update_false_color_canvas():
             return
 
         false_color_rgb = _RUNTIME['img_array_dark'][:, :, default_bands].astype(np.uint16)
+        false_color_rgb = autoscale_int_image(false_color_rgb)
 
     elif view_mode == 'white' or _RUNTIME['selecting_white']:
 
@@ -184,6 +215,7 @@ def update_false_color_canvas():
             return
 
         false_color_rgb = _RUNTIME['img_array_white'][:, :, default_bands].astype(np.uint16)
+        false_color_rgb = autoscale_int_image(false_color_rgb)
     else:
         print(f"WARNING: unknown view mode '{view_mode}' and/or selection combination selecting "
               f"dark={_RUNTIME['selecting_dark']}, white={_RUNTIME['selecting_white']}.")
@@ -523,12 +555,10 @@ layout = [
 
 window = sg.Window("Cube Inspector", layout=layout, margins=(100,100), finalize=True)
 
-# try:
-#     _STATE = state_load()
-# except FileNotFoundError as e:
-#
-#     print(f"Could not find state file. Initializing with defaults.")
 
+# TODO Incorporate dark and white selection logic with buttons.
+# TODO Show corresponding wl for RGB band selection. In plot or as a text box?
+# TODO Gaussian or mean RGB.
 
 # Keep most of the global stuff in this single dictionary for later access
 _RUNTIME = {
