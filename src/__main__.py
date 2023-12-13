@@ -292,6 +292,13 @@ def cube_meta():
 
 
 def find_cube(user_selected_file_path):
+    """
+
+    FIXME make independent of the _RUNTIME selecting_white etc.
+
+    :param user_selected_file_path:
+    :return:
+    """
     selected_dir_path = os.path.dirname(user_selected_file_path)
     selected_file_name = os.path.basename(user_selected_file_path)
     base_name = selected_file_name.rsplit(sep='.',maxsplit=1)[0]
@@ -632,20 +639,62 @@ def restore_from_previous_session():
     print(f"Trying to restore state from previous session.")
 
     if _STATE['main_cube_hdr_path'] is not None:
-        window[guiek_cube_show_filename].update(value=get_base_name_wo_postfix(_STATE['main_cube_hdr_path']))
+        path = _STATE['main_cube_hdr_path']
+        window[guiek_cube_show_filename].update(value=get_base_name_wo_postfix(path))
+        handle_cube_file_selected(path)
     if _STATE['dark_cube_hdr_path'] is not None:
-        window[guiek_dark_show_filename].update(value=get_base_name_wo_postfix(_STATE['dark_cube_hdr_path']))
+        path = _STATE['dark_cube_hdr_path']
+        window[guiek_dark_show_filename].update(value=get_base_name_wo_postfix(path))
+        handle_dark_file_selected(path)
     if _STATE['white_cube_hdr_path'] is not None:
-        window[guiek_white_show_filename].update(value=get_base_name_wo_postfix(_STATE['white_cube_hdr_path']))
+        path = _STATE['white_cube_hdr_path']
+        window[guiek_white_show_filename].update(value=get_base_name_wo_postfix(path))
+        handle_white_file_selected(path)
 
-    _RUNTIME['selecting_dark'] = True
-    open_cube(hdr_path=_STATE['dark_cube_hdr_path'], data_path=_STATE['dark_cube_data_path'])
-    _RUNTIME['selecting_dark'] = False
-    _RUNTIME['selecting_white'] = True
-    open_cube(hdr_path=_STATE['white_cube_hdr_path'], data_path=_STATE['white_cube_data_path'])
+    # _RUNTIME['selecting_dark'] = True
+    # open_cube(hdr_path=_STATE['dark_cube_hdr_path'], data_path=_STATE['dark_cube_data_path'])
+    # _RUNTIME['selecting_dark'] = False
+    # _RUNTIME['selecting_white'] = True
+    # open_cube(hdr_path=_STATE['white_cube_hdr_path'], data_path=_STATE['white_cube_data_path'])
+    # _RUNTIME['selecting_white'] = False
+    # open_cube(hdr_path=_STATE['main_cube_hdr_path'], data_path=_STATE['main_cube_data_path'])
+
+    _RUNTIME['view_mode'] = 'cube'
+    update_false_color_canvas()
+
+
+def handle_cube_file_selected(file_path:str):
     _RUNTIME['selecting_white'] = False
-    open_cube(hdr_path=_STATE['main_cube_hdr_path'], data_path=_STATE['main_cube_data_path'])
+    _RUNTIME['selecting_dark'] = False
+    _RUNTIME['view_mode'] = 'cube'
+    find_cube(file_path)
+    update_false_color_canvas()
 
+
+def handle_dark_file_selected(file_path: str):
+    _RUNTIME['selecting_dark'] = True
+    _RUNTIME['view_mode'] = 'dark'
+
+    find_cube(file_path)
+    # image_array_dark should now have a value
+    dark_cube = _RUNTIME['img_array_dark']
+    print(f"Dark cube set. Calculating median of the scan lines.")
+
+    # Scan lines are on axis=0
+    med = np.median(dark_cube, axis=0)
+    print(f"DEBUG: dark median shape: {med.shape}")
+    _RUNTIME['dark_median'] = med
+
+    _RUNTIME['selecting_dark'] = False
+    print(f"Dark median saved.")
+    update_false_color_canvas()
+
+
+def handle_white_file_selected(file_path: str):
+    _RUNTIME['selecting_white'] = True
+    _RUNTIME['view_mode'] = 'white'
+    find_cube(file_path)
+    _RUNTIME['selecting_white'] = False
     update_false_color_canvas()
 
 
@@ -667,34 +716,15 @@ def main():
 
         if event == guiek_cube_file_selected:
             window[guiek_cube_show_filename].update(value=get_base_name_wo_postfix(values[guiek_cube_file_selected]))
-            _RUNTIME['selecting_white'] = False
-            _RUNTIME['selecting_dark'] = False
-            _RUNTIME['view_mode'] = 'cube'
-            find_cube(values[guiek_cube_file_selected])
-            update_false_color_canvas()
+            handle_cube_file_selected(values[guiek_cube_file_selected])
 
         if event == guiek_dark_file_selected:
             window[guiek_dark_show_filename].update(value=get_base_name_wo_postfix(values[guiek_dark_file_selected]))
-            _RUNTIME['selecting_dark'] = True
-            _RUNTIME['view_mode'] = 'dark'
-
-            find_cube(values[guiek_dark_file_selected])
-            # image_array_dark should now have a value
-            dark_cube = _RUNTIME['img_array_dark']
-            print(f"Dark cube set. Calculating median of the scan lines.")
-
-            # Scan lines are on axis=0
-            med = np.median(dark_cube, axis=0)
-            print(f"DEBUG: dark median shape: {med.shape}")
-            _RUNTIME['dark_median'] = med
-
-            _RUNTIME['selecting_dark'] = False
-            print(f"Dark median saved.")
+            handle_dark_file_selected(values[guiek_dark_file_selected])
 
         if event == guiek_white_file_selected:
             window[guiek_white_show_filename].update(value=get_base_name_wo_postfix(values[guiek_white_file_selected]))
-            _RUNTIME['selecting_white'] = True
-            find_cube(values[guiek_white_file_selected])
+            handle_white_file_selected(values[guiek_white_file_selected])
 
         if event == guiek_cube_show_button:
             _RUNTIME['view_mode'] = 'cube'
