@@ -49,8 +49,66 @@ def mouse_click_event(eventi):
     _RUNTIME['rect_y_0'] = eventi.ydata
 
 
-def mouse_release_event(eventi):
+def update_px_plot(spectrum: np.array, std: np.array=None, x0=None, y0=None, x1=None, y1=None):
+    """Update the pixel plot canvas when clicking or dragging over false color RGB canvas.
 
+    :param spectrum:
+        Spectrum to plot.
+    :param std:
+        If dragging, this is the standard deviation of the selected area that is
+        drawn as a shadow over spectrum.
+    :param x0:
+        If clicking, click x location. If dragging, drag start x location.
+    :param y0:
+        If clicking, click y location. If dragging, drag start y location.
+    :param x1:
+        If dragging, drag end x location. Ignored if clicking.
+    :param y1:
+        If dragging, drag end y location. Ignored if clicking.
+    """
+
+    if spectrum is None:
+        print(f"WARNING: Cannot update pixel plot: spectrum was None. Returning.")
+        return
+
+    # Draw new plot and refersh canvas
+    _RUNTIME['fig_agg_px_plot'].get_tk_widget().forget()
+    ax_px_plot.plot(spectrum)
+
+    if std is not None:
+        ax_px_plot.fill_between(_RUNTIME['cube_bands'], spectrum - (std / 2), spectrum + (std / 2), alpha=0.2)
+
+    _RUNTIME['fig_agg_px_plot'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
+
+    # Draw rectangle over RGB canvas and refresh
+    if std is not None and x0 is not None and y0 is not None and x1 is not None and y1 is not None:
+        width = math.fabs(x0 - x1)
+        height = math.fabs(y0 - y1)
+        _RUNTIME['fig_agg_false_color'].get_tk_widget().forget()
+        handle = ax_false_color.add_patch(Rectangle((x0, y0), width=width, height=height, fill=False, edgecolor='gray'))
+        _RUNTIME['rectangle_handles'].append(handle)
+        _RUNTIME['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
+
+    # Draw click location as a dot
+    elif x0 is not None and y0 is not None:
+        _RUNTIME['fig_agg_false_color'].get_tk_widget().forget()
+        handle = ax_false_color.scatter(int(x0), int(y0))
+        _RUNTIME['dot_handles'].append(handle)
+        _RUNTIME['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
+    else:
+        print(f"WARNING: Bad pixel plot update call.")
+
+
+def mouse_release_event(eventi):
+    """Handles Matplotlib mouse button release event.
+
+    Note that you cannot raise PySimpleGUI popups in here as it will block the event loop.
+
+    :param eventi:
+        Matplotlib mouse button release event.
+    """
+
+    # Left click for right-handed mouse.
     if eventi.button == 1:
         x0 = _RUNTIME['rect_x_0']
         y0 = _RUNTIME['rect_y_0']
@@ -58,45 +116,25 @@ def mouse_release_event(eventi):
         y = eventi.ydata
         x = eventi.xdata
 
-        drag_treshold = 5 # pixels FIXME put to settings
+        drag_treshold = _SETTINGS['drag_threshold']
 
         # We have a drag if we have previously set (and not cleared) x0 and y0 and the release position is far enough away.
         if (x0 is not None or y0 is not None) and (math.fabs(x0 - x) > drag_treshold or math.fabs(y0 - y) > drag_treshold):
 
-            print(f"Mouse dragged from ({x0}, {y0}) to ({x}, {y})")
+            # print(f"Mouse dragged from ({x0}, {y0}) to ({x}, {y})")
             drag_start_x = int(min(x, x0))
             drag_start_y = int(min(y, y0))
             drag_end_x = int(max(x, x0))
             drag_end_y = int(max(y, y0))
             rows = list(np.arange(start=drag_start_x, stop=drag_end_x, step=1))
             cols = list(np.arange(start=drag_start_y, stop=drag_end_y, step=1))
-            print(f"Rows: {rows}")
-            print(f"Cols: {cols}")
 
-            # So for some reason, when reading from image array, rows and colums are inverted
-            # (compared to when reading from 'cube_data').
-            # sub_image = _VARS['img_array'].read_subimage(rows=cols, cols=rows)
             sub_image = _RUNTIME['img_array'][cols][:, rows]
 
-            # sg.popup_ok(title="Wait a bit, I'm calculating..")
             sub_mean = np.mean(sub_image, axis=(0,1))
             sub_std = np.std(sub_image, axis=(0,1))
 
-            print(f"len mean spectra: {len(sub_mean)}")
-
-            # Draw new plot and refersh canvas
-            _RUNTIME['fig_agg'].get_tk_widget().forget()
-            ax_px_plot.plot(sub_mean)
-            ax_px_plot.fill_between(_RUNTIME['cube_bands'], sub_mean - (sub_std / 2), sub_mean + (sub_std / 2), alpha=0.2)
-            _RUNTIME['fig_agg'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
-
-            # Draw rectangle over RGB canvas and refresh
-            width = math.fabs(drag_start_x - drag_end_x)
-            height = math.fabs(drag_start_y - drag_end_y)
-            _RUNTIME['fig_agg_false_color'].get_tk_widget().forget()
-            handle = ax_false_color.add_patch(Rectangle((drag_start_x, drag_start_y), width=width, height=height, fill=False, edgecolor='gray'))
-            _RUNTIME['rectangle_handles'].append(handle)
-            _RUNTIME['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
+            update_px_plot(spectrum=sub_mean, std=sub_std, x0=drag_start_x, y0=drag_start_y, x1=drag_end_x, y1=drag_end_y)
 
             if _RUNTIME['selecting_dark']:
 
@@ -126,38 +164,24 @@ def mouse_release_event(eventi):
             # Else it was just a click and we can reset x0 and y0
             _RUNTIME['rect_x_0'] = None
             _RUNTIME['rect_y_0'] = None
-
-            # And do the normal click stuff
-            _RUNTIME['fig_agg'].get_tk_widget().forget()
-            # pixel = _VARS['img_array'].read_pixel(row=int(y), col=int(x))
             pixel = _RUNTIME['img_array'][int(y), int(x)]
-            ax_px_plot.plot(pixel)
-            _RUNTIME['fig_agg'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
+            update_px_plot(spectrum=pixel, x0=x, y0=y)
 
-            # Draw click location as a dot
-            _RUNTIME['fig_agg_false_color'].get_tk_widget().forget()
-            handle = ax_false_color.scatter(int(x), int(y))
-            _RUNTIME['dot_handles'].append(handle)
-            _RUNTIME['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
-
-    print(f"Mouse button {eventi.button} released at ({x},{y})")
+        print(f"Mouse button {eventi.button} released at ({x},{y})")
 
 
 def update_false_color_canvas():
 
-    # default_bands = [int(band) - 1 for band in cube_data.metadata['default bands']]
-    default_bands = (_RUNTIME['band_R'], _RUNTIME['band_G'], _RUNTIME['band_B'])
+    rgb_bands = (_RUNTIME['band_R'], _RUNTIME['band_G'], _RUNTIME['band_B'])
 
-    if default_bands[0]==0 and default_bands[1]==0 and default_bands[2]==0:
+    if rgb_bands[0]==0 and rgb_bands[1]==0 and rgb_bands[2]==0:
         print(f"Trying to get RGB bands from HDR file.")
         if _RUNTIME['cube_data'] is not None:
-            default_bands = [int(band) - 1 for band in _RUNTIME['cube_data'].metadata['default bands']]
+            rgb_bands = [int(band) - 1 for band in _RUNTIME['cube_data'].metadata['default bands']]
 
-    _RUNTIME['band_R'] = default_bands[0]
-    _RUNTIME['band_G'] = default_bands[1]
-    _RUNTIME['band_B'] = default_bands[2]
-
-    print(f"RGB: {default_bands}")
+    _RUNTIME['band_R'] = rgb_bands[0]
+    _RUNTIME['band_G'] = rgb_bands[1]
+    _RUNTIME['band_B'] = rgb_bands[2]
 
     view_mode = _RUNTIME['view_mode']
 
@@ -194,9 +218,9 @@ def update_false_color_canvas():
             return
 
         if _RUNTIME['white_corrected']:
-            false_color_rgb = _RUNTIME['img_array'][:, :, default_bands].astype(np.float32)
+            false_color_rgb = _RUNTIME['img_array'][:, :, rgb_bands].astype(np.float32)
         else:
-            false_color_rgb = _RUNTIME['img_array'][:, :, default_bands].astype(np.uint16)
+            false_color_rgb = _RUNTIME['img_array'][:, :, rgb_bands].astype(np.uint16)
             false_color_rgb = autoscale_int_image(false_color_rgb)
 
     elif view_mode == 'dark' or _RUNTIME['selecting_dark']:
@@ -205,7 +229,7 @@ def update_false_color_canvas():
             print(f"Image array None. Nothing to show.")
             return
 
-        false_color_rgb = _RUNTIME['img_array_dark'][:, :, default_bands].astype(np.uint16)
+        false_color_rgb = _RUNTIME['img_array_dark'][:, :, rgb_bands].astype(np.uint16)
         false_color_rgb = autoscale_int_image(false_color_rgb)
 
     elif view_mode == 'white' or _RUNTIME['selecting_white']:
@@ -214,27 +238,14 @@ def update_false_color_canvas():
             print(f"Image array None. Nothing to show.")
             return
 
-        false_color_rgb = _RUNTIME['img_array_white'][:, :, default_bands].astype(np.uint16)
+        false_color_rgb = _RUNTIME['img_array_white'][:, :, rgb_bands].astype(np.uint16)
         false_color_rgb = autoscale_int_image(false_color_rgb)
     else:
         print(f"WARNING: unknown view mode '{view_mode}' and/or selection combination selecting "
               f"dark={_RUNTIME['selecting_dark']}, white={_RUNTIME['selecting_white']}.")
         return
 
-    # if _RUNTIME['selecting_dark']:
-    #     false_color_rgb = _RUNTIME['img_array_dark'][:, :, default_bands].astype(np.uint16)
-    # elif _RUNTIME['selecting_white']:
-    #     false_color_rgb = _RUNTIME['img_array_white'][:, :, default_bands].astype(np.uint16)
-    # else:
-    #     # false_color_rgb = cube_data.read_bands(bands=default_bands)
-    #     # false_color_rgb = _VARS['img_array'].read_bands(bands=default_bands).astype(np.uint16)
-    #     if _RUNTIME['white_corrected']:
-    #         false_color_rgb = _RUNTIME['img_array'][:, :, default_bands].astype(np.float32)
-    #     else:
-    #         false_color_rgb = _RUNTIME['img_array'][:, :, default_bands].astype(np.uint16)
-
     _RUNTIME['fig_agg_false_color'].get_tk_widget().forget()
-    ######## False color canvas
     ax_false_color.imshow(false_color_rgb)
     ax_false_color.set_xlabel('samples')
     ax_false_color.set_ylabel('lines')
@@ -410,9 +421,9 @@ def clear_plot():
     """
 
     print(f"Clearing pixel plot")
-    _RUNTIME['fig_agg'].get_tk_widget().forget()
+    _RUNTIME['fig_agg_px_plot'].get_tk_widget().forget()
     ax_px_plot.clear()
-    _RUNTIME['fig_agg'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
+    _RUNTIME['fig_agg_px_plot'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
 
     print(f"Clearing false color RGB")
     # Remove rectangles and other Artists
@@ -563,7 +574,7 @@ window = sg.Window("Cube Inspector", layout=layout, margins=(100,100), finalize=
 # Keep most of the global stuff in this single dictionary for later access
 _RUNTIME = {
     'window': window,
-    'fig_agg': draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot),
+    'fig_agg_px_plot': draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot),
     'fig_agg_false_color': draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color),
     'pltFig': False,
     'cube_data': None,
@@ -608,6 +619,10 @@ _STATE = {
     'band_B': 0,
     'band_G': 0,
     'band_R': 0,
+}
+
+_SETTINGS = {
+    'drag_threshold': 5
 }
 
 
@@ -663,6 +678,7 @@ def main():
             find_cube(values[guiek_cube_file_selected])
 
         if event == guiek_dark_file_selected:
+            print(f"Dark file selected? What if canceled??")
             window[guiek_dark_show_filename].update(value=get_base_name_wo_postfix(values[guiek_dark_file_selected]))
             _RUNTIME['selecting_dark'] = True
 
