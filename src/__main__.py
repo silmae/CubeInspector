@@ -28,6 +28,9 @@ spy.settings.envi_support_nonlowercase_params = True
 # Set a nice color theme
 sg.theme('dark grey 9')
 
+state_dir_path = os.getcwd()
+state_file_name = "ci_state"
+
 
 def draw_figure(canvas, figure):
     """Helper function to draw things on canvas."""
@@ -291,15 +294,19 @@ def cube_meta():
     secax.set_xlabel(r"Wavelength [$nm$]")
 
 
-def find_cube(user_selected_file_path, mode):
+def find_cube(path: str, mode: str):
+    """Finds a cube, and if it is OK, opens it.
+
+    :param path:
+        Path to the cube. Can be path to either .hdr, .raw, .log etc.
+        Correct files are inferred based on the base name of the file
+        without the postfix.
+    :param mode:
+        Either 'cube', 'dark' or 'white'.
     """
 
-    :param user_selected_file_path:
-    :param mode:
-    :return:
-    """
-    selected_dir_path = os.path.dirname(user_selected_file_path)
-    selected_file_name = os.path.basename(user_selected_file_path)
+    selected_dir_path = os.path.dirname(path)
+    selected_file_name = os.path.basename(path)
     base_name = selected_file_name.rsplit(sep='.', maxsplit=1)[0]
 
     print(f"File: '{selected_file_name}' in '{selected_dir_path}'. Base name is '{base_name}'.")
@@ -355,7 +362,8 @@ def open_cube(hdr_path, data_path, mode):
         _RUNTIME['cube_data'] = cube_data
         _RUNTIME['img_array'] = img_array
 
-        # First set things up using metadata
+        # Set things up using metadata
+        # TODO this should work even if the cube is not selected? Perhaps not as it doesn't make much sense.
         cube_meta()
 
     elif mode == 'dark':
@@ -376,6 +384,10 @@ def open_cube(hdr_path, data_path, mode):
 
 
 def calc_dark():
+    """Calculates dark correction for current cube.
+
+    Updates the false color canvas after done.
+    """
 
     print(f"Dark calculation called...")
 
@@ -400,7 +412,6 @@ def calc_white():
 
     print(f"White calculation called...")
 
-    # img_array = _VARS['img_array']
     if _RUNTIME['img_array'] is None:
         print(f"Cannot calculate dark because image array is None. Select a cube first.")
         return
@@ -412,7 +423,6 @@ def calc_white():
 
     _RUNTIME['img_array'] = np.divide(_RUNTIME['img_array'], white_spectrum, dtype=np.float32)
     _RUNTIME['white_corrected'] = True
-    # _VARS['img_array'] = img_array
 
     update_false_color_canvas()
 
@@ -440,10 +450,6 @@ def clear_plot():
     _RUNTIME['rectangle_handles'] = []
     _RUNTIME['dot_handles'] = []
     update_false_color_canvas()
-
-
-state_dir_path = os.getcwd()
-state_file_name = "ci_state"
 
 
 def state_save():
@@ -744,15 +750,12 @@ def main():
             update_false_color_canvas()
 
         if event == guiek_calc_dark:
-            print(f"Dark button press")
             calc_dark()
 
         if event == guiek_calc_white:
-            print(f"White button press")
             calc_white()
 
         if event == guiek_rgb_update_button:
-            print(f"RGB update button pressed")
             try:
                 _RUNTIME['band_R'] = int(values[guiek_r_input])
                 _RUNTIME['band_G'] = int(values[guiek_g_input])
