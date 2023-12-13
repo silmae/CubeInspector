@@ -206,7 +206,7 @@ def update_false_color_canvas():
         else:
             return image.astype(np.float32)
 
-    if view_mode == 'cube' and not _RUNTIME['selecting_dark'] and not _RUNTIME['selecting_white']:
+    if view_mode == 'cube' and not _RUNTIME['selecting_white']:
         if _RUNTIME['img_array'] is None:
             print(f"Image array None. Nothing to show.")
             return
@@ -217,7 +217,7 @@ def update_false_color_canvas():
             false_color_rgb = _RUNTIME['img_array'][:, :, rgb_bands].astype(np.uint16)
             false_color_rgb = autoscale_int_image(false_color_rgb)
 
-    elif view_mode == 'dark' or _RUNTIME['selecting_dark']:
+    elif view_mode == 'dark':
 
         if _RUNTIME['img_array_dark'] is None:
             print(f"Image array None. Nothing to show.")
@@ -236,7 +236,7 @@ def update_false_color_canvas():
         false_color_rgb = autoscale_int_image(false_color_rgb)
     else:
         print(f"WARNING: unknown view mode '{view_mode}' and/or selection combination selecting "
-              f"dark={_RUNTIME['selecting_dark']}, white={_RUNTIME['selecting_white']}.")
+              f"white={_RUNTIME['selecting_white']}.")
         return
 
     _RUNTIME['fig_agg_false_color'].get_tk_widget().forget()
@@ -291,17 +291,16 @@ def cube_meta():
     secax.set_xlabel(r"Wavelength [$nm$]")
 
 
-def find_cube(user_selected_file_path):
+def find_cube(user_selected_file_path, mode):
     """
 
-    FIXME make independent of the _RUNTIME selecting_white etc.
-
     :param user_selected_file_path:
+    :param mode:
     :return:
     """
     selected_dir_path = os.path.dirname(user_selected_file_path)
     selected_file_name = os.path.basename(user_selected_file_path)
-    base_name = selected_file_name.rsplit(sep='.',maxsplit=1)[0]
+    base_name = selected_file_name.rsplit(sep='.', maxsplit=1)[0]
 
     print(f"File: '{selected_file_name}' in '{selected_dir_path}'. Base name is '{base_name}'.")
 
@@ -318,28 +317,31 @@ def find_cube(user_selected_file_path):
         if file_name.startswith(base_name) and (file_name.lower().endswith(".raw") or file_name.lower().endswith(".img")):
             raw_found = True
             raw_file_name = file_name
+        # TODO handle .dat for reflectance cubes
 
     if hdr_found and raw_found:
         print(f"Envi cube files OK. ")
         hdr_path = os.path.join(selected_dir_path, hdr_file_name)
         raw_path = os.path.join(selected_dir_path, raw_file_name)
 
-        if _RUNTIME['selecting_dark']:
+        if mode == 'dark':
             _STATE['dark_cube_hdr_path'] = hdr_path
             _STATE['dark_cube_data_path'] = raw_path
-        if _RUNTIME['selecting_white']:
+        elif mode == 'white':
             _STATE['white_cube_hdr_path'] = hdr_path
             _STATE['white_cube_data_path'] = raw_path
-        else:
+        elif mode == 'cube':
             _STATE['main_cube_hdr_path'] = hdr_path
             _STATE['main_cube_data_path'] = raw_path
+        else:
+            print(f"ERROR Unsupported mode '{mode}' for find_cube().")
 
-        open_cube(hdr_path=hdr_path, data_path=raw_path)
+        open_cube(hdr_path=hdr_path, data_path=raw_path, mode=mode)
     else:
         print(f"Not OK. Either hdr or raw file not found from given directory.")
 
 
-def open_cube(hdr_path, data_path):
+def open_cube(hdr_path, data_path, mode):
 
     if hdr_path is None or data_path is None:
         print(f"Either HDR path or DATA path was None. Cannot open cube.")
@@ -348,7 +350,7 @@ def open_cube(hdr_path, data_path):
     cube_data = envi.open(file=hdr_path, image=data_path)
     img_array = cube_data.load().asarray()
 
-    if not _RUNTIME['selecting_dark'] and not _RUNTIME['selecting_white']:
+    if mode == 'cube':
 
         _RUNTIME['cube_data'] = cube_data
         _RUNTIME['img_array'] = img_array
@@ -356,12 +358,12 @@ def open_cube(hdr_path, data_path):
         # First set things up using metadata
         cube_meta()
 
-    elif _RUNTIME['selecting_dark']:
+    elif mode == 'dark':
         _RUNTIME['img_array_dark'] = img_array
-    elif _RUNTIME['selecting_white']:
+    elif mode == 'white':
         _RUNTIME['img_array_white'] = img_array
     else:
-        print(f"WARNING: WE SHOULD NOT BE HERE!!")
+        print(f"WARNING: Unsupported mode '{mode}' for open_cube().")
 
     # Connect mouse click
     if not _RUNTIME['mouse_handlers_connected']:
@@ -383,7 +385,7 @@ def calc_dark():
 
     dark_spectrum = _RUNTIME['dark_median']
     if dark_spectrum is None:
-        print(f"Cannot calculate dark because dark spectrum is None. Select a region from a dark cube first.")
+        print(f"Cannot calculate dark because dark median is None. Select a dark cube first.")
         return
 
     # FIXME subtract the MEDIAN of the dark. Not the mean
@@ -405,7 +407,7 @@ def calc_white():
 
     white_spectrum = _RUNTIME['white_spectra']
     if white_spectrum is None:
-        print(f"Cannot calculate dark because dark spectrum is None. Select a region from a dark cube first.")
+        print(f"Cannot calculate white because white spectrum is None. Select a region from the white cube first.")
         return
 
     _RUNTIME['img_array'] = np.divide(_RUNTIME['img_array'], white_spectrum, dtype=np.float32)
@@ -594,7 +596,7 @@ _RUNTIME = {
     'dot_handles': [],
 
     'selecting_white': False,
-    'selecting_dark': False,
+    # 'selecting_dark': False, # Not in use
 
     'view_mode': None, # 'cube', 'dark', 'white' or None
 
@@ -665,17 +667,17 @@ def restore_from_previous_session():
 
 def handle_cube_file_selected(file_path:str):
     _RUNTIME['selecting_white'] = False
-    _RUNTIME['selecting_dark'] = False
+    # _RUNTIME['selecting_dark'] = False
     _RUNTIME['view_mode'] = 'cube'
-    find_cube(file_path)
+    find_cube(file_path, mode='cube')
     update_false_color_canvas()
 
 
 def handle_dark_file_selected(file_path: str):
-    _RUNTIME['selecting_dark'] = True
+    # _RUNTIME['selecting_dark'] = True
     _RUNTIME['view_mode'] = 'dark'
 
-    find_cube(file_path)
+    find_cube(file_path, mode='dark')
     # image_array_dark should now have a value
     dark_cube = _RUNTIME['img_array_dark']
     print(f"Dark cube set. Calculating median of the scan lines.")
@@ -685,7 +687,7 @@ def handle_dark_file_selected(file_path: str):
     print(f"DEBUG: dark median shape: {med.shape}")
     _RUNTIME['dark_median'] = med
 
-    _RUNTIME['selecting_dark'] = False
+    # _RUNTIME['selecting_dark'] = False
     print(f"Dark median saved.")
     update_false_color_canvas()
 
@@ -693,7 +695,7 @@ def handle_dark_file_selected(file_path: str):
 def handle_white_file_selected(file_path: str):
     _RUNTIME['selecting_white'] = True
     _RUNTIME['view_mode'] = 'white'
-    find_cube(file_path)
+    find_cube(file_path, mode='white')
     _RUNTIME['selecting_white'] = False
     update_false_color_canvas()
 
