@@ -98,12 +98,8 @@ def mouse_release_event(eventi):
 
             if _RUNTIME['selecting_white']:
                 _RUNTIME['white_spectra'] = sub_mean
-                _RUNTIME['white_spectra'] = 1
                 _RUNTIME['selecting_white'] = False
                 print(f"White spectrum saved.")
-                # del answer
-            else:
-                print(f"No selecting anything")
 
         else:
             print(f"We have a click at ({x},{y})")
@@ -405,6 +401,8 @@ def calc_dark():
     _RUNTIME['img_array'] = np.clip(_RUNTIME['img_array'], a_min=0, a_max=None)
     _RUNTIME['img_array'] = _RUNTIME['img_array']
 
+    _RUNTIME['view_mode'] = 'cube'
+    _RUNTIME['dark_corrected'] = True
     update_false_color_canvas()
 
 
@@ -424,6 +422,7 @@ def calc_white():
     _RUNTIME['img_array'] = np.divide(_RUNTIME['img_array'], white_spectrum, dtype=np.float32)
     _RUNTIME['white_corrected'] = True
 
+    _RUNTIME['view_mode'] = 'cube'
     update_false_color_canvas()
 
 
@@ -490,6 +489,9 @@ guiek_cube_show_button = "-CUBE SHOW BUTTON-"
 guiek_dark_show_button = "-DARK SHOW BUTTON-"
 guiek_white_show_button = "-WHITE SHOW BUTTON-"
 
+guiek_white_select_region = "-WHITE SELECT REGION-"
+guiek_white_select_whole = "-WHITE SELECT WHOLE-"
+
 # RGB selection
 guiek_r_input = "-R-"
 guiek_g_input = "-G-"
@@ -539,6 +541,8 @@ cube_column = [
         sg.In(size=(25, 1), enable_events=True, key=guiek_white_show_filename, disabled=True, text_color='black', background_color='grey'),
         sg.FileBrowse(key=guiek_white_file_selected, target=guiek_white_file_selected, enable_events=True,),
         sg.Button('Show', enable_events=True, key=guiek_white_show_button),
+        sg.Button("Select region", k=guiek_white_select_region),
+        sg.Button("Select whole", k=guiek_white_select_whole),
         sg.Button("Calculate", k=guiek_calc_white),
     ],
     [
@@ -591,6 +595,7 @@ _RUNTIME = {
     'img_array_dark': None,
     'img_array_white': None,
     'white_corrected': False,
+    'dark_corrected': False,
     'cube_wls': None,
     'cube_bands': None,
     'rect_x_0': None,
@@ -676,6 +681,16 @@ def handle_cube_file_selected(file_path:str):
     # _RUNTIME['selecting_dark'] = False
     _RUNTIME['view_mode'] = 'cube'
     find_cube(file_path, mode='cube')
+
+    # Reset in case a new cube is selected
+    _RUNTIME['dark_median'] = None
+    _RUNTIME['img_array_dark'] = None
+    _RUNTIME['dark_corrected'] = False
+
+    _RUNTIME['white_spectra'] = None
+    _RUNTIME['img_array_white'] = None
+    _RUNTIME['white_corrected'] = False
+
     update_false_color_canvas()
 
 
@@ -748,6 +763,17 @@ def main():
             _RUNTIME['view_mode'] = 'white'
             print(f"White show button press")
             update_false_color_canvas()
+
+        if event == guiek_white_select_region:
+            print("Select region button pressed")
+            _RUNTIME['selecting_white'] = True
+
+        if event == guiek_white_select_whole:
+            print("Select whole button pressed")
+            white_array = _RUNTIME['img_array_white']
+            white_mean = np.mean(white_array, axis=(0,1))
+            print(f"White spectra shpe: {white_mean.shape}")
+            _RUNTIME['white_spectra'] = white_mean
 
         if event == guiek_calc_dark:
             calc_dark()
