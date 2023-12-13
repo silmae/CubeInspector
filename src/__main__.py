@@ -477,6 +477,45 @@ def state_load():
     window[guiek_b_input].update(str(_RUNTIME['band_B']))
 
 
+def update_UI_component_state():
+
+    # First, disable all
+    window[guiek_cube_show_button].update(disabled=True)
+
+    window[guiek_dark_file_selected].update(disabled=True)
+    window[guiek_dark_show_button].update(disabled=True)
+
+    window[guiek_white_file_selected].update(disabled=True)
+    window[guiek_white_show_button].update(disabled=True)
+    window[guiek_white_select_region].update(disabled=True)
+    window[guiek_white_select_whole].update(disabled=True)
+    window[guiek_calc_white].update(disabled=True)
+
+    window[guiek_save_cube].update(disabled=True)
+
+    if _RUNTIME['img_array'] is not None:
+        window[guiek_cube_show_button].update(disabled=False)
+        window[guiek_dark_file_selected].update(disabled=False)
+        window[guiek_white_file_selected].update(disabled=False)
+    if _RUNTIME['img_array_dark'] is not None:
+        window[guiek_dark_show_button].update(disabled=False)
+        if not _RUNTIME['dark_corrected'] and _RUNTIME['dark_median'] is not None:
+            window[guiek_calc_dark].update(disabled=False)
+        else:
+            window[guiek_calc_dark].update(disabled=True)
+    if _RUNTIME['img_array_white'] is not None:
+        window[guiek_white_show_button].update(disabled=False)
+        window[guiek_white_select_region].update(disabled=False)
+        window[guiek_white_select_whole].update(disabled=False)
+        if not _RUNTIME['white_corrected'] and _RUNTIME['white_spectra'] is not None and _RUNTIME['dark_corrected']:
+            window[guiek_calc_white].update(disabled=False)
+        else:
+            window[guiek_calc_white].update(disabled=True)
+
+    if _RUNTIME['white_corrected'] and _RUNTIME['dark_corrected']:
+        window[guiek_save_cube].update(disabled=False)
+
+
 # GUI entity keys
 guiek_cube_file_selected = "-CUBE SELECT-"
 guiek_dark_file_selected = "-DARK SELECT-"
@@ -505,7 +544,8 @@ guiek_cube_false_color = "-FALSE COLOR-"
 guiek_pixel_plot_canvas = "-PX PLOT CANVAS-"
 guiek_cube_meta_text = "-CUBE META-"
 
-fig_px_plot = None
+guiek_console_output = "-CONSOLE-"
+guiek_save_cube = "-SAVE CUBE-"
 
 fig_px_plot = plt.figure(figsize=(5, 4), dpi=100)
 ax_px_plot = fig_px_plot.add_subplot(111)
@@ -519,45 +559,9 @@ cube_meta_column = [
         sg.Text("Cube metadata"),
     ],
     [
-        sg.Multiline(size=(70, 25), key=guiek_cube_meta_text),
-    ]
+        sg.Multiline(size=(50, 15), key=guiek_cube_meta_text),
+    ],
 ]
-
-
-def update_UI_component_state():
-
-    print(f"update_UI_component_state called")
-
-    # First, disable all
-    window[guiek_cube_show_button].update(disabled=True)
-
-    window[guiek_dark_file_selected].update(disabled=True)
-    window[guiek_dark_show_button].update(disabled=True)
-
-    window[guiek_white_file_selected].update(disabled=True)
-    window[guiek_white_show_button].update(disabled=True)
-    window[guiek_white_select_region].update(disabled=True)
-    window[guiek_white_select_whole].update(disabled=True)
-    window[guiek_calc_white].update(disabled=True)
-
-    if _RUNTIME['img_array'] is not None:
-        window[guiek_cube_show_button].update(disabled=False)
-        window[guiek_dark_file_selected].update(disabled=False)
-        window[guiek_white_file_selected].update(disabled=False)
-    if _RUNTIME['img_array_dark'] is not None:
-        window[guiek_dark_show_button].update(disabled=False)
-        if not _RUNTIME['dark_corrected'] and _RUNTIME['dark_median'] is not None:
-            window[guiek_calc_dark].update(disabled=False)
-        else:
-            window[guiek_calc_dark].update(disabled=True)
-    if _RUNTIME['img_array_white'] is not None:
-        window[guiek_white_show_button].update(disabled=False)
-        window[guiek_white_select_region].update(disabled=False)
-        window[guiek_white_select_whole].update(disabled=False)
-        if not _RUNTIME['white_corrected'] and _RUNTIME['white_spectra'] is not None and _RUNTIME['dark_corrected']:
-            window[guiek_calc_white].update(disabled=False)
-        else:
-            window[guiek_calc_white].update(disabled=True)
 
 
 cube_column = [
@@ -612,10 +616,16 @@ layout = [
         sg.Column(cube_column),
         sg.VSeperator(),
         sg.Column(pixel_plot_column),
-    ]
+    ],
+    [sg.HSeparator()],
+    [
+        sg.Multiline(size=(120, 15), reroute_stdout=True, k=guiek_console_output, autoscroll=True, horizontal_scroll=True),
+        sg.Button("Save", key=guiek_save_cube, enable_events=True, disabled=True)
+    ],
 ]
 
 window = sg.Window("Cube Inspector", layout=layout, margins=(100,100), finalize=True)
+window[guiek_console_output].Widget.configure(wrap='none')
 
 
 # TODO Incorporate dark and white selection logic with buttons.
@@ -701,14 +711,6 @@ def restore_from_previous_session():
         path = _STATE['white_cube_hdr_path']
         window[guiek_white_show_filename].update(value=get_base_name_wo_postfix(path))
         handle_white_file_selected(path)
-
-    # _RUNTIME['selecting_dark'] = True
-    # open_cube(hdr_path=_STATE['dark_cube_hdr_path'], data_path=_STATE['dark_cube_data_path'])
-    # _RUNTIME['selecting_dark'] = False
-    # _RUNTIME['selecting_white'] = True
-    # open_cube(hdr_path=_STATE['white_cube_hdr_path'], data_path=_STATE['white_cube_data_path'])
-    # _RUNTIME['selecting_white'] = False
-    # open_cube(hdr_path=_STATE['main_cube_hdr_path'], data_path=_STATE['main_cube_data_path'])
 
     _RUNTIME['view_mode'] = 'cube'
     update_false_color_canvas()
@@ -822,6 +824,11 @@ def main():
         if event == guiek_calc_white:
             calc_white()
 
+        if event == guiek_save_cube:
+            print("Save button press")
+            # TODO save ENVI .dat
+            # TODO open ENVI .dat
+
         if event == guiek_rgb_update_button:
             try:
                 _RUNTIME['band_R'] = int(values[guiek_r_input])
@@ -842,7 +849,7 @@ if __name__ == '__main__':
 
     try:
         state_load()
-        print(f"State loaded: {_STATE}")
+        print(f"State loaded")
     except FileNotFoundError as e:
         print(f"No previous state found.")
 
