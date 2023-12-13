@@ -111,6 +111,7 @@ def mouse_release_event(eventi):
             update_px_plot(spectrum=pixel, x0=x, y0=y)
 
         print(f"Mouse button {eventi.button} released at ({x},{y})")
+        update_UI_component_state()
 
 
 def update_px_plot(spectrum: np.array, std: np.array=None, x0=None, y0=None, x1=None, y1=None):
@@ -522,28 +523,65 @@ cube_meta_column = [
     ]
 ]
 
+
+def update_UI_component_state():
+
+    print(f"update_UI_component_state called")
+
+    # First, disable all
+    window[guiek_cube_show_button].update(disabled=True)
+
+    window[guiek_dark_file_selected].update(disabled=True)
+    window[guiek_dark_show_button].update(disabled=True)
+
+    window[guiek_white_file_selected].update(disabled=True)
+    window[guiek_white_show_button].update(disabled=True)
+    window[guiek_white_select_region].update(disabled=True)
+    window[guiek_white_select_whole].update(disabled=True)
+    window[guiek_calc_white].update(disabled=True)
+
+    if _RUNTIME['img_array'] is not None:
+        window[guiek_cube_show_button].update(disabled=False)
+        window[guiek_dark_file_selected].update(disabled=False)
+        window[guiek_white_file_selected].update(disabled=False)
+    if _RUNTIME['img_array_dark'] is not None:
+        window[guiek_dark_show_button].update(disabled=False)
+        if not _RUNTIME['dark_corrected'] and _RUNTIME['dark_median'] is not None:
+            window[guiek_calc_dark].update(disabled=False)
+        else:
+            window[guiek_calc_dark].update(disabled=True)
+    if _RUNTIME['img_array_white'] is not None:
+        window[guiek_white_show_button].update(disabled=False)
+        window[guiek_white_select_region].update(disabled=False)
+        window[guiek_white_select_whole].update(disabled=False)
+        if not _RUNTIME['white_corrected'] and _RUNTIME['white_spectra'] is not None and _RUNTIME['dark_corrected']:
+            window[guiek_calc_white].update(disabled=False)
+        else:
+            window[guiek_calc_white].update(disabled=True)
+
+
 cube_column = [
     [
         sg.Text("Cube"),
-        sg.In(size=(25, 1), enable_events=True, key=guiek_cube_show_filename, disabled=True, text_color='black'),
-        sg.FileBrowse(key=guiek_cube_file_selected, target=guiek_cube_file_selected, enable_events=True,),
-        sg.Button('Show', enable_events=True, key=guiek_cube_show_button),
+        sg.In(size=(25, 1), enable_events=True, key=guiek_cube_show_filename, disabled=True, text_color='black'), # always disabled
+        sg.FileBrowse(key=guiek_cube_file_selected, target=guiek_cube_file_selected, enable_events=True,), # always enabled
+        sg.Button('Show', enable_events=True, key=guiek_cube_show_button, disabled=True),
     ],
     [
         sg.Text("Dark"),
-        sg.In(size=(25, 1), enable_events=True, key=guiek_dark_show_filename, disabled=True, text_color='black'),
-        sg.FileBrowse(key=guiek_dark_file_selected, target=guiek_dark_file_selected, enable_events=True,),
-        sg.Button('Show', enable_events=True, key=guiek_dark_show_button),
-        sg.Button("Calculate", k=guiek_calc_dark),
+        sg.In(size=(25, 1), enable_events=True, key=guiek_dark_show_filename, disabled=True, text_color='black'),# always disabled
+        sg.FileBrowse(key=guiek_dark_file_selected, target=guiek_dark_file_selected, enable_events=True, disabled=True),
+        sg.Button('Show', enable_events=True, key=guiek_dark_show_button, disabled=True),
+        sg.Button("Calculate", k=guiek_calc_dark, disabled=True),
     ],
     [
         sg.Text("White"),
-        sg.In(size=(25, 1), enable_events=True, key=guiek_white_show_filename, disabled=True, text_color='black', background_color='grey'),
-        sg.FileBrowse(key=guiek_white_file_selected, target=guiek_white_file_selected, enable_events=True,),
-        sg.Button('Show', enable_events=True, key=guiek_white_show_button),
-        sg.Button("Select region", k=guiek_white_select_region),
-        sg.Button("Select whole", k=guiek_white_select_whole),
-        sg.Button("Calculate", k=guiek_calc_white),
+        sg.In(size=(25, 1), enable_events=True, key=guiek_white_show_filename, disabled=True, text_color='black', background_color='grey'),# always disabled
+        sg.FileBrowse(key=guiek_white_file_selected, target=guiek_white_file_selected, enable_events=True, disabled=True),
+        sg.Button('Show', enable_events=True, key=guiek_white_show_button, disabled=True),
+        sg.Button("Select region", k=guiek_white_select_region, disabled=True),
+        sg.Button("Select whole", k=guiek_white_select_whole, disabled=True),
+        sg.Button("Calculate", k=guiek_calc_white, disabled=True),
     ],
     [
         # sg.Listbox(values=[], enable_events=True, size=(80, 20), key=guiek_file_list)
@@ -692,6 +730,7 @@ def handle_cube_file_selected(file_path:str):
     _RUNTIME['white_corrected'] = False
 
     update_false_color_canvas()
+    update_UI_component_state()
 
 
 def handle_dark_file_selected(file_path: str):
@@ -711,6 +750,7 @@ def handle_dark_file_selected(file_path: str):
     # _RUNTIME['selecting_dark'] = False
     print(f"Dark median saved.")
     update_false_color_canvas()
+    update_UI_component_state()
 
 
 def handle_white_file_selected(file_path: str):
@@ -719,6 +759,7 @@ def handle_white_file_selected(file_path: str):
     find_cube(file_path, mode='white')
     _RUNTIME['selecting_white'] = False
     update_false_color_canvas()
+    update_UI_component_state()
 
 
 def main():
@@ -789,6 +830,9 @@ def main():
                 update_false_color_canvas()
             except ValueError as ve:
                 print(f"Failed to cast to int.")
+
+        # Update UI after every event is handled.
+        update_UI_component_state()
 
     state_save()
     window.close()
