@@ -49,6 +49,71 @@ def mouse_click_event(eventi):
     _RUNTIME['rect_y_0'] = eventi.ydata
 
 
+def mouse_release_event(eventi):
+    """Handles Matplotlib mouse button release event.
+
+    Note that you cannot raise PySimpleGUI popups in here as it will block the event loop.
+
+    :param eventi:
+        Matplotlib mouse button release event.
+    """
+
+    # Left click for right-handed mouse.
+    if eventi.button == 1:
+        x0 = _RUNTIME['rect_x_0']
+        y0 = _RUNTIME['rect_y_0']
+
+        y = eventi.ydata
+        x = eventi.xdata
+
+        drag_treshold = _SETTINGS['drag_threshold']
+
+        # We have a drag if we have previously set (and not cleared) x0 and y0 and the release position is far enough away.
+        if (x0 is not None or y0 is not None) and (math.fabs(x0 - x) > drag_treshold or math.fabs(y0 - y) > drag_treshold):
+
+            # print(f"Mouse dragged from ({x0}, {y0}) to ({x}, {y})")
+            drag_start_x = int(min(x, x0))
+            drag_start_y = int(min(y, y0))
+            drag_end_x = int(max(x, x0))
+            drag_end_y = int(max(y, y0))
+            rows = list(np.arange(start=drag_start_x, stop=drag_end_x, step=1))
+            cols = list(np.arange(start=drag_start_y, stop=drag_end_y, step=1))
+
+            if _RUNTIME['view_mode'] == 'cube':
+                sub_image = _RUNTIME['img_array'][cols][:, rows]
+            elif _RUNTIME['view_mode'] == 'dark':
+                sub_image = _RUNTIME['img_array_dark'][cols][:, rows]
+            elif _RUNTIME['view_mode'] == 'white':
+                sub_image = _RUNTIME['img_array_white'][cols][:, rows]
+            else:
+                print(f"WARNING: View mode '{_RUNTIME['view_mode']}' not supported.")
+
+            sub_mean = np.mean(sub_image, axis=(0,1))
+            sub_std = np.std(sub_image, axis=(0,1))
+
+            update_px_plot(spectrum=sub_mean, std=sub_std, x0=drag_start_x, y0=drag_start_y, x1=drag_end_x, y1=drag_end_y)
+
+            if _RUNTIME['selecting_white']:
+                _RUNTIME['white_spectra'] = sub_mean
+                _RUNTIME['white_spectra'] = 1
+                _RUNTIME['selecting_white'] = False
+                print(f"White spectrum saved.")
+                # del answer
+            else:
+                print(f"No selecting anything")
+
+        else:
+            print(f"We have a click at ({x},{y})")
+
+            # Else it was just a click and we can reset x0 and y0
+            _RUNTIME['rect_x_0'] = None
+            _RUNTIME['rect_y_0'] = None
+            pixel = _RUNTIME['img_array'][int(y), int(x)]
+            update_px_plot(spectrum=pixel, x0=x, y0=y)
+
+        print(f"Mouse button {eventi.button} released at ({x},{y})")
+
+
 def update_px_plot(spectrum: np.array, std: np.array=None, x0=None, y0=None, x1=None, y1=None):
     """Update the pixel plot canvas when clicking or dragging over false color RGB canvas.
 
@@ -97,77 +162,6 @@ def update_px_plot(spectrum: np.array, std: np.array=None, x0=None, y0=None, x1=
         _RUNTIME['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
     else:
         print(f"WARNING: Bad pixel plot update call.")
-
-
-def mouse_release_event(eventi):
-    """Handles Matplotlib mouse button release event.
-
-    Note that you cannot raise PySimpleGUI popups in here as it will block the event loop.
-
-    :param eventi:
-        Matplotlib mouse button release event.
-    """
-
-    # Left click for right-handed mouse.
-    if eventi.button == 1:
-        x0 = _RUNTIME['rect_x_0']
-        y0 = _RUNTIME['rect_y_0']
-
-        y = eventi.ydata
-        x = eventi.xdata
-
-        drag_treshold = _SETTINGS['drag_threshold']
-
-        # We have a drag if we have previously set (and not cleared) x0 and y0 and the release position is far enough away.
-        if (x0 is not None or y0 is not None) and (math.fabs(x0 - x) > drag_treshold or math.fabs(y0 - y) > drag_treshold):
-
-            # print(f"Mouse dragged from ({x0}, {y0}) to ({x}, {y})")
-            drag_start_x = int(min(x, x0))
-            drag_start_y = int(min(y, y0))
-            drag_end_x = int(max(x, x0))
-            drag_end_y = int(max(y, y0))
-            rows = list(np.arange(start=drag_start_x, stop=drag_end_x, step=1))
-            cols = list(np.arange(start=drag_start_y, stop=drag_end_y, step=1))
-
-            sub_image = _RUNTIME['img_array'][cols][:, rows]
-
-            sub_mean = np.mean(sub_image, axis=(0,1))
-            sub_std = np.std(sub_image, axis=(0,1))
-
-            update_px_plot(spectrum=sub_mean, std=sub_std, x0=drag_start_x, y0=drag_start_y, x1=drag_end_x, y1=drag_end_y)
-
-            if _RUNTIME['selecting_dark']:
-
-                # answer = sg.popup_yes_no("Do you want to save selected mean spectra as dark reference?")
-                # if answer == 'Yes':
-                # FIXME Apparently, we cannot raise a popup iside a Matplotlib event without freezing the UI.
-
-                # FIXME This is wrong! Should take every line from the whole image and calculate median over scanned lines.
-                #   It is not a spectrum, but a 2d array that is subtracted from each line in the actual cube.
-                _RUNTIME['dark_spectra'] = np.median(sub_image, axis=(0, 1))
-                _RUNTIME['dark_spectra'] = 1
-                _RUNTIME['selecting_dark'] = False
-                print(f"Dark spectrum saved.")
-                # del answer
-            elif _RUNTIME['selecting_white']:
-                _RUNTIME['white_spectra'] = sub_mean
-                _RUNTIME['white_spectra'] = 1
-                _RUNTIME['selecting_white'] = False
-                print(f"White spectrum saved.")
-                # del answer
-            else:
-                print(f"No selecting anything")
-
-        else:
-            print(f"We have a click at ({x},{y})")
-
-            # Else it was just a click and we can reset x0 and y0
-            _RUNTIME['rect_x_0'] = None
-            _RUNTIME['rect_y_0'] = None
-            pixel = _RUNTIME['img_array'][int(y), int(x)]
-            update_px_plot(spectrum=pixel, x0=x, y0=y)
-
-        print(f"Mouse button {eventi.button} released at ({x},{y})")
 
 
 def update_false_color_canvas():
@@ -380,7 +374,7 @@ def calc_dark():
         print(f"Cannot calculate dark because image array is None. Select a cube first.")
         return
 
-    dark_spectrum = _RUNTIME['dark_spectra']
+    dark_spectrum = _RUNTIME['dark_median']
     if dark_spectrum is None:
         print(f"Cannot calculate dark because dark spectrum is None. Select a region from a dark cube first.")
         return
@@ -598,7 +592,7 @@ _RUNTIME = {
     'view_mode': None, # 'cube', 'dark', 'white' or None
 
     'white_spectra': None,
-    'dark_spectra': None,
+    'dark_median': None,
 
     'mouse_handlers_connected': False,
 
@@ -675,14 +669,27 @@ def main():
             window[guiek_cube_show_filename].update(value=get_base_name_wo_postfix(values[guiek_cube_file_selected]))
             _RUNTIME['selecting_white'] = False
             _RUNTIME['selecting_dark'] = False
+            _RUNTIME['view_mode'] = 'cube'
             find_cube(values[guiek_cube_file_selected])
+            update_false_color_canvas()
 
         if event == guiek_dark_file_selected:
-            print(f"Dark file selected? What if canceled??")
             window[guiek_dark_show_filename].update(value=get_base_name_wo_postfix(values[guiek_dark_file_selected]))
             _RUNTIME['selecting_dark'] = True
+            _RUNTIME['view_mode'] = 'dark'
 
             find_cube(values[guiek_dark_file_selected])
+            # image_array_dark should now have a value
+            dark_cube = _RUNTIME['img_array_dark']
+            print(f"Dark cube set. Calculating median of the scan lines.")
+
+            # Scan lines are on axis=0
+            med = np.median(dark_cube, axis=0)
+            print(f"DEBUG: dark median shape: {med.shape}")
+            _RUNTIME['dark_median'] = med
+
+            _RUNTIME['selecting_dark'] = False
+            print(f"Dark median saved.")
 
         if event == guiek_white_file_selected:
             window[guiek_white_show_filename].update(value=get_base_name_wo_postfix(values[guiek_white_file_selected]))
