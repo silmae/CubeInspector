@@ -200,6 +200,7 @@ _RUNTIME = {
 
     'rectangle_handles': [],
     'dot_handles': [],
+    'rgb_handles': [],
 
     'selecting_white': False,
 
@@ -284,6 +285,7 @@ def mouse_release_event(eventi):
             sub_mean = np.mean(sub_image, axis=(0,1))
             sub_std = np.std(sub_image, axis=(0,1))
 
+            update_px_rgb_lines()
             update_px_plot(spectrum=sub_mean, std=sub_std, x0=drag_start_x, y0=drag_start_y, x1=drag_end_x, y1=drag_end_y)
 
             if _RUNTIME['selecting_white']:
@@ -296,12 +298,27 @@ def mouse_release_event(eventi):
             _RUNTIME['rect_x_0'] = None
             _RUNTIME['rect_y_0'] = None
             pixel = _RUNTIME['img_array'][int(y), int(x)]
+            update_px_rgb_lines()
             update_px_plot(spectrum=pixel, x0=x, y0=y)
 
         update_UI_component_state()
 
 
-def update_px_plot(spectrum: np.array, std: np.array=None, x0=None, y0=None, x1=None, y1=None):
+def update_px_rgb_lines():
+    for handle in _RUNTIME['rgb_handles']:
+        handle.remove()
+    _RUNTIME['rgb_handles'] = []
+
+    handle_r = ax_px_plot.axvline(x=_RUNTIME['band_R'], color='red')
+    handle_g = ax_px_plot.axvline(x=_RUNTIME['band_B'], color='blue')
+    handle_b = ax_px_plot.axvline(x=_RUNTIME['band_G'], color='green')
+    _RUNTIME['rgb_handles'].append(handle_r)
+    _RUNTIME['rgb_handles'].append(handle_g)
+    _RUNTIME['rgb_handles'].append(handle_b)
+    update_px_plot()
+
+
+def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None, x1=None, y1=None):
     """Update the pixel plot canvas when clicking or dragging over false color RGB canvas.
 
     :param spectrum:
@@ -319,13 +336,11 @@ def update_px_plot(spectrum: np.array, std: np.array=None, x0=None, y0=None, x1=
         If dragging, drag end y location. Ignored if clicking.
     """
 
-    if spectrum is None:
-        print(f"WARNING: Cannot update pixel plot: spectrum was None. Returning.")
-        return
+    if spectrum is not None:
+        ax_px_plot.plot(spectrum)
 
     # Draw new plot and refersh canvas
     _RUNTIME['fig_agg_px_plot'].get_tk_widget().forget()
-    ax_px_plot.plot(spectrum)
 
     if std is not None:
         ax_px_plot.fill_between(_RUNTIME['cube_bands'], spectrum - (std / 2), spectrum + (std / 2), alpha=0.2)
@@ -682,9 +697,12 @@ def clear_plot():
         handle.remove()
     for handle in _RUNTIME['dot_handles']:
         handle.remove()
+    for handle in _RUNTIME['rgb_handles']:
+        handle.remove()
 
     _RUNTIME['rectangle_handles'] = []
     _RUNTIME['dot_handles'] = []
+    _RUNTIME['rgb_handles'] = []
     update_false_color_canvas()
 
 
@@ -933,6 +951,7 @@ def main():
                 _RUNTIME['band_R'] = int(values[guiek_r_input])
                 _RUNTIME['band_G'] = int(values[guiek_g_input])
                 _RUNTIME['band_B'] = int(values[guiek_b_input])
+                update_px_rgb_lines()
                 update_false_color_canvas()
             except ValueError as ve:
                 print(f"WARNING: Failed casting band to an integer. False color image not updated.")
