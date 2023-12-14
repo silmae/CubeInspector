@@ -17,3 +17,4 @@ dependencies:
       - spectral # for image cube read and write
       #- spectres # for resampling spectra
       - pysimplegui
+      - pyinstaller
