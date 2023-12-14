@@ -6,5 +6,10 @@ __pycache__/
 # Exclude log files
 log*/* 
 
+# Exclude build files
+src/build*/* 
+src/dist*/* 
+src*/CubeInspector.spec
+
 src*/ci_state.toml
 
