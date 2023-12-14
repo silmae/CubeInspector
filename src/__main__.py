@@ -111,36 +111,61 @@ cube_column = [
     [
         sg.Text("Cube"),
         sg.In(size=(25, 1), enable_events=True, key=guiek_cube_show_filename, disabled=True, text_color='black'), # always disabled
-        sg.FileBrowse(key=guiek_cube_file_browse, target=guiek_cube_file_browse, enable_events=True, ), # always enabled
-        sg.Button('Show', enable_events=True, key=guiek_cube_show_button, disabled=True),
+        sg.FileBrowse(key=guiek_cube_file_browse, target=guiek_cube_file_browse, enable_events=True,
+                      tooltip="Select a hyperspectral ENVI format hypercube to show. It suffices to pick either a header or \n"
+                              "data file, the directory is searched for associated files automatically. The data can \n"
+                              "be as raw data (radiance, digital number, etc.) or precomputed reflectance cube with \n"
+                              "dark and white corrections."), # always enabled
+        sg.Button('Show', enable_events=True, key=guiek_cube_show_button, disabled=True,
+                  tooltip="Shows selected cube. This is used to swap back and forth with dark, white and main cubes if applicable, i.e., \n"
+                          "when not dealing with precomputed reflectance cubes."),
     ],
     [
         sg.Text("Dark"),
         sg.In(size=(25, 1), enable_events=True, key=guiek_dark_show_filename, disabled=True, text_color='black'),# always disabled
-        sg.FileBrowse(key=guiek_dark_file_browse, target=guiek_dark_file_browse, enable_events=True, disabled=True),
-        sg.Button('Show', enable_events=True, key=guiek_dark_show_button, disabled=True),
-        sg.Button("Calculate", k=guiek_calc_dark, disabled=True),
+        sg.FileBrowse(key=guiek_dark_file_browse, target=guiek_dark_file_browse, enable_events=True, disabled=True,
+                      tooltip="Select a dark cube to be used for dark current correction. Median of the cube is calculated \n"
+                              "automatically after selection, so give it some time."),
+        sg.Button('Show', enable_events=True, key=guiek_dark_show_button, disabled=True,
+                  tooltip="Shows selected DARK cube. This is used to swap back and forth with dark, white and main cubes if applicable, i.e., \n"
+                          "when not dealing with precomputed reflectance cubes."
+                  ),
+        sg.Button("Calculate", k=guiek_calc_dark, disabled=True,
+                  tooltip="Subtracts dark current from the main cube. \n Dark current is the median of the whole dark cube over scan lines."),
     ],
     [
         sg.Text("White"),
         sg.In(size=(25, 1), enable_events=True, key=guiek_white_show_filename, disabled=True, text_color='black', background_color='grey'),# always disabled
-        sg.FileBrowse(key=guiek_white_file_browse, target=guiek_white_file_browse, enable_events=True, disabled=True),
-        sg.Button('Show', enable_events=True, key=guiek_white_show_button, disabled=True),
-        sg.Button("Select region", k=guiek_white_select_region, disabled=True),
-        sg.Button("Select whole", k=guiek_white_select_whole, disabled=True),
-        sg.Button("Calculate", k=guiek_calc_white, disabled=True),
+        sg.FileBrowse(key=guiek_white_file_browse, target=guiek_white_file_browse, enable_events=True, disabled=True,
+                      tooltip="Select white reference cube for white correction. If your white reference is in your main data cube, \n"
+                              "you can select it again and use the 'Select region' button to select the pixels you want to use.\n"),
+        sg.Button('Show', enable_events=True, key=guiek_white_show_button, disabled=True,
+                  tooltip="Shows selected WHITE cube. This is used to swap back and forth with dark, white and main cubes if applicable, i.e., \n"
+                          "when not dealing with precomputed reflectance cubes."
+                  ),
+        sg.Button("Select region", k=guiek_white_select_region, disabled=True,
+                  tooltip="Select a region of the white cube to be used as a white reference."),
+        sg.Button("Select whole", k=guiek_white_select_whole, disabled=True,
+                  tooltip="Select the whole white cube to be used as a white reference."),
+        sg.Button("Calculate", k=guiek_calc_white, disabled=True,
+                  tooltip="Calculate white correction. The each pixel (spectrum) will be divided by the white reference spectrum, \n"
+                          "which is the band-wise mean of all the selected white reference area."),
     ],
     [
         sg.Canvas(key=guiek_cube_false_color),
     ],
     [
         sg.Text("R"),
-        sg.In(size=(5, 1), key=guiek_r_input),
+        sg.In(size=(5, 1), key=guiek_r_input,
+              tooltip="Band used for the red channel in the false color representation of the cube."),
         sg.Text("G"),
-        sg.In(size=(5, 1), key=guiek_g_input),
+        sg.In(size=(5, 1), key=guiek_g_input,
+              tooltip="Band used for the green channel in the false color representation of the cube."),
         sg.Text("B"),
-        sg.In(size=(5, 1), key=guiek_b_input),
-        sg.Button('Update', enable_events=True, key=guiek_rgb_update_button)
+        sg.In(size=(5, 1), key=guiek_b_input,
+              tooltip="Band used for the blue channel in the false color representation of the cube."),
+        sg.Button('Update', enable_events=True, key=guiek_rgb_update_button,
+                  tooltip="Update false color image and pixel plot to represent the selected bands.")
     ],
 ]
 
@@ -160,7 +185,10 @@ layout = [
     [sg.HSeparator()],
     [
         sg.Multiline(size=(120, 15), reroute_stdout=True, k=guiek_console_output, autoscroll=True, horizontal_scroll=True),
-        sg.Button("Save", key=guiek_save_cube, enable_events=True, disabled=True)
+        sg.Button("Save", key=guiek_save_cube, enable_events=True, disabled=True,
+                  tooltip="Saves the main cube as reflectance cube (with .dat extension). Only available \n"
+                          "after dark and white corrections are calculated. Not available for precomputed \n "
+                          "reflectance cubes.")
     ],
 ]
 
