@@ -181,6 +181,7 @@ def draw_figure(canvas, figure):
 _RUNTIME = {
     'window': window,
     'fig_agg_px_plot': draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot),
+    'sec_axes_px_plot': None,
     'fig_agg_false_color': draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color),
     'pltFig': False,
 
@@ -336,11 +337,30 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
         If dragging, drag end y location. Ignored if clicking.
     """
 
+    # Draw new plot and refersh canvas
+    _RUNTIME['fig_agg_px_plot'].get_tk_widget().forget()
+
     if spectrum is not None:
         ax_px_plot.plot(spectrum)
 
-    # Draw new plot and refersh canvas
-    _RUNTIME['fig_agg_px_plot'].get_tk_widget().forget()
+    bands = _RUNTIME['cube_bands']
+    wls = _RUNTIME['cube_wls']
+
+    if bands is not None and wls is not None and _RUNTIME['sec_axes_px_plot'] is None:
+
+        ax_px_plot.set_xlabel('Band')
+        ax_px_plot.set_xlim(bands[0], bands[-1])
+
+        def forward(x):
+            return np.interp(x, bands, wls)
+
+        def inverse(x):
+            return np.interp(x, wls, bands)
+
+        # FIXME the wavelength axis is not perfect as two figures are shown at the extremes
+        secax = ax_px_plot.secondary_xaxis('top', functions=(forward, inverse))
+        secax.set_xlabel(r"Wavelength [$nm$]")
+        _RUNTIME['sec_axes_px_plot'] = secax
 
     if std is not None:
         ax_px_plot.fill_between(_RUNTIME['cube_bands'], spectrum - (std / 2), spectrum + (std / 2), alpha=0.2)
@@ -362,8 +382,6 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
         handle = ax_false_color.scatter(int(x0), int(y0))
         _RUNTIME['dot_handles'].append(handle)
         _RUNTIME['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
-    else:
-        print(f"WARNING: Bad pixel plot update call.")
 
 
 def update_false_color_canvas():
@@ -501,22 +519,6 @@ def cube_meta():
     if not walength_set:
         print(f"Could not set wavelengths and bands.")
         return
-
-    ax_px_plot.set_xlabel('Band')
-    bands = _RUNTIME['cube_bands']
-    wls = _RUNTIME['cube_wls']
-
-    ax_px_plot.set_xlim(bands[0], bands[-1])
-
-    def forward(x):
-        return np.interp(x, bands, wls)
-
-    def inverse(x):
-        return np.interp(x, wls, bands)
-
-    # FIXME the wavelength axis is not perfect as two figures are shown at the extremes
-    secax = ax_px_plot.secondary_xaxis('top', functions=(forward, inverse))
-    secax.set_xlabel(r"Wavelength [$nm$]")
 
 
 def find_cube(path: str, mode: str):
@@ -703,6 +705,7 @@ def clear_plot():
     _RUNTIME['rectangle_handles'] = []
     _RUNTIME['dot_handles'] = []
     _RUNTIME['rgb_handles'] = []
+    _RUNTIME['sec_axes_px_plot'] = None
     update_false_color_canvas()
 
 
