@@ -243,6 +243,8 @@ _RUNTIME = {
     'band_B': 0,
     'band_G': 0,
     'band_R': 0,
+
+    'plots': [],
 }
 
 
@@ -368,8 +370,19 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
     # Draw new plot and refersh canvas
     _RUNTIME['fig_agg_px_plot'].get_tk_widget().forget()
 
+    # Plot the plot and save it. Update
     if spectrum is not None:
         ax_px_plot.plot(spectrum)
+        _RUNTIME['plots'].append(spectrum)
+        new_plot_max = 0
+        for plot in _RUNTIME['plots']:
+            plot_max = np.max(plot)
+            if plot_max > new_plot_max:
+                new_plot_max = plot_max
+
+        # print(f"Setting ylim to {_RUNTIME['plot_max']}")
+        # Set ylim a little higher than the max value of any of the plots
+        ax_px_plot.set_ylim(0, new_plot_max * 1.05)
 
     bands = _RUNTIME['cube_bands']
     wls = _RUNTIME['cube_wls']
@@ -734,6 +747,7 @@ def clear_plot():
     _RUNTIME['dot_handles'] = []
     _RUNTIME['rgb_handles'] = []
     _RUNTIME['sec_axes_px_plot'] = None
+    _RUNTIME['plots'] = []
     update_false_color_canvas()
 
 
