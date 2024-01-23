@@ -240,9 +240,9 @@ _RUNTIME = {
 
     'mouse_handlers_connected': False,
 
-    'band_B': 0,
-    'band_G': 0,
-    'band_R': 0,
+    'band_B': '', # string
+    'band_G': '', # string
+    'band_R': '', # string
 
     'plots': [],
 }
@@ -335,17 +335,44 @@ def mouse_release_event(eventi):
         update_UI_component_state()
 
 
+def infer_runtime_RGB_value(value :str):
+
+    should_fill = False
+    if value.startswith('f'):
+        to_int = value[1:]
+        should_fill = True
+    else:
+        to_int = value
+
+    try:
+        parsed_int = int(to_int)
+    except ValueError as e:
+        print(f"Could not parse fill value from string '{value}'. Input a raw int or for filling, in format fXXX, where XXX can be interperted as an integer.")
+        raise
+
+    return should_fill, parsed_int
+
+
 def update_px_rgb_lines():
     for handle in _RUNTIME['rgb_handles']:
         handle.remove()
     _RUNTIME['rgb_handles'] = []
 
-    handle_r = ax_px_plot.axvline(x=_RUNTIME['band_R'], color='red')
-    handle_g = ax_px_plot.axvline(x=_RUNTIME['band_B'], color='blue')
-    handle_b = ax_px_plot.axvline(x=_RUNTIME['band_G'], color='green')
-    _RUNTIME['rgb_handles'].append(handle_r)
-    _RUNTIME['rgb_handles'].append(handle_g)
-    _RUNTIME['rgb_handles'].append(handle_b)
+    should_fill, value = infer_runtime_RGB_value(_RUNTIME['band_R'])
+    if not should_fill:
+        handle_r = ax_px_plot.axvline(x=value, color='red')
+        _RUNTIME['rgb_handles'].append(handle_r)
+
+    should_fill, value = infer_runtime_RGB_value(_RUNTIME['band_G'])
+    if not should_fill:
+        handle_g = ax_px_plot.axvline(x=value, color='green')
+        _RUNTIME['rgb_handles'].append(handle_g)
+
+    should_fill, value = infer_runtime_RGB_value(_RUNTIME['band_B'])
+    if not should_fill:
+        handle_b = ax_px_plot.axvline(x=value, color='blue')
+        _RUNTIME['rgb_handles'].append(handle_b)
+
     update_px_plot()
 
 
@@ -430,18 +457,26 @@ def update_false_color_canvas():
 
     Uses user-defined bands for RGB reconstruction. Pixel values are automatically
     scaled for the whole possible range.
+
+    Check if RGB exists in _RUNTIME and use that
+    _RUNTIME RGB has to be loaded from _STATE
+    If not, get RGB from metadata.
     """
 
-    rgb_bands = (_RUNTIME['band_R'], _RUNTIME['band_G'], _RUNTIME['band_B'])
+    possibly_R_str = str(_RUNTIME['band_R'])
+    possibly_G_str = str(_RUNTIME['band_G'])
+    possibly_B_str = str(_RUNTIME['band_B'])
+    meta_bands = [int(band) - 1 for band in _RUNTIME['cube_data'].metadata['default bands']]
 
-    if rgb_bands[0] == 0 and rgb_bands[1] == 0 and rgb_bands[2] == 0:
-        print(f"Trying to get RGB bands from HDR file.")
-        if _RUNTIME['cube_data'] is not None:
-            rgb_bands = [int(band) - 1 for band in _RUNTIME['cube_data'].metadata['default bands']]
-
-    _RUNTIME['band_R'] = rgb_bands[0]
-    _RUNTIME['band_G'] = rgb_bands[1]
-    _RUNTIME['band_B'] = rgb_bands[2]
+    if len(possibly_R_str) == 0: # empty string
+        possibly_R_str = str(meta_bands[0])
+        _RUNTIME['band_R'] = possibly_R_str
+    if len(possibly_G_str) == 0: # empty string
+        possibly_G_str = str(meta_bands[1])
+        _RUNTIME['band_G'] = possibly_G_str
+    if len(possibly_B_str) == 0: # empty string
+        possibly_B_str = str(meta_bands[2])
+        _RUNTIME['band_B'] = possibly_B_str
 
     view_mode = _RUNTIME['view_mode']
 
@@ -487,6 +522,44 @@ def update_false_color_canvas():
         else:
             return image.astype(np.float32)
 
+    def img_array_to_rgb(img_array: np.array, possible_R: str, possible_G: str, possible_B: str):
+
+        max_band = img_array.shape[2] - 1
+
+        should_fill, value = infer_runtime_RGB_value(possible_R)
+        if should_fill:
+            img_R = np.ones_like(img_array[:, :, 0]) * value
+        else:
+            img_R = img_array[:, :, np.clip(value,0,max_band)]
+
+        should_fill, value = infer_runtime_RGB_value(possible_G)
+        if should_fill:
+            img_G = np.ones_like(img_array[:, :, 0]) * value
+        else:
+            img_G = img_array[:, :, np.clip(value,0,max_band)]
+
+        should_fill, value = infer_runtime_RGB_value(possible_B)
+        if should_fill:
+            img_B = np.ones_like(img_array[:, :, 0]) * value
+        else:
+            img_B = img_array[:, :, np.clip(value,0,max_band)]
+
+        img_rgb = np.stack((img_R,img_G,img_B), axis=2)
+        max_val = np.max(img_rgb)
+        median = np.median(img_rgb)
+        mean = np.mean(img_rgb)
+        print(f"RGB image max value: {max_val}, median: {median}, mean: {mean}")
+        if max_val > 5:
+            print(f"Seems like we have big values (> 5), so I'll try to scale the RGB image a bit.")
+            # img_rgb = img_rgb / (median * 2)
+            # img_rgb = img_rgb / mean
+            img_rgb = img_rgb / (max_val * 0.5)
+            print(f"RGB image after scaling; max value: {max_val}, median: {median}, mean: {mean}")
+
+        print(img_rgb.dtype)
+
+        return img_rgb#.astype(np.float32)
+
     if view_mode == 'cube' and not _RUNTIME['selecting_white']:
 
         if _RUNTIME['img_array'] is None:
@@ -494,11 +567,13 @@ def update_false_color_canvas():
             return
 
         if _RUNTIME['white_corrected']:
-            false_color_rgb = _RUNTIME['img_array'][:, :, rgb_bands].astype(np.float32)
-            # false_color_rgb = autoscale_float_image(false_color_rgb)
+            # false_color_rgb = _RUNTIME['img_array'][:, :, rgb_bands].astype(np.float32)
+            # # false_color_rgb = autoscale_float_image(false_color_rgb)
+            false_color_rgb = img_array_to_rgb(_RUNTIME['img_array'], possibly_R_str, possibly_G_str, possibly_B_str)
         else:
-            false_color_rgb = _RUNTIME['img_array'][:, :, rgb_bands].astype(np.uint16)
-            false_color_rgb = autoscale_int_image(false_color_rgb)
+            # false_color_rgb = _RUNTIME['img_array'][:, :, rgb_bands].astype(np.uint16)
+            # false_color_rgb = autoscale_int_image(false_color_rgb)
+            false_color_rgb = img_array_to_rgb(_RUNTIME['img_array'], possibly_R_str, possibly_G_str, possibly_B_str)
 
     elif view_mode == 'dark':
 
@@ -506,8 +581,9 @@ def update_false_color_canvas():
             print(f"Image array for dark is None. Nothing to show.")
             return
 
-        false_color_rgb = _RUNTIME['img_array_dark'][:, :, rgb_bands].astype(np.uint16)
-        false_color_rgb = autoscale_int_image(false_color_rgb)
+        # false_color_rgb = _RUNTIME['img_array_dark'][:, :, rgb_bands].astype(np.uint16)
+        # false_color_rgb = autoscale_int_image(false_color_rgb)
+        false_color_rgb = img_array_to_rgb(_RUNTIME['img_array_dark'], possibly_R_str, possibly_G_str, possibly_B_str)
 
     elif view_mode == 'white' or _RUNTIME['selecting_white']:
 
@@ -515,8 +591,9 @@ def update_false_color_canvas():
             print(f"Image array for white is None. Nothing to show.")
             return
 
-        false_color_rgb = _RUNTIME['img_array_white'][:, :, rgb_bands].astype(np.uint16)
-        false_color_rgb = autoscale_int_image(false_color_rgb)
+        # false_color_rgb = _RUNTIME['img_array_white'][:, :, rgb_bands].astype(np.uint16)
+        # false_color_rgb = autoscale_int_image(false_color_rgb)
+        false_color_rgb = img_array_to_rgb(_RUNTIME['img_array_white'], possibly_R_str, possibly_G_str, possibly_B_str)
     else:
         print(f"WARNING: unknown view mode '{view_mode}' and/or selection combination selecting "
               f"white={_RUNTIME['selecting_white']}.")
@@ -755,9 +832,9 @@ def state_save():
     """Save the _STATE dict to disk.
     """
 
-    _STATE['band_R'] = _RUNTIME['band_R']
-    _STATE['band_G'] = _RUNTIME['band_G']
-    _STATE['band_B'] = _RUNTIME['band_B']
+    _STATE['band_R'] = str(_RUNTIME['band_R'])
+    _STATE['band_G'] = str(_RUNTIME['band_G'])
+    _STATE['band_B'] = str(_RUNTIME['band_B'])
 
     TH.write_dict_as_toml(dictionary=_STATE, directory=state_dir_path, filename=state_file_name)
     print(f"State saved")
@@ -773,9 +850,9 @@ def state_load():
     for key, value in state.items():
         _STATE[key] = value
 
-    _RUNTIME['band_R'] = _STATE['band_R']
-    _RUNTIME['band_G'] = _STATE['band_G']
-    _RUNTIME['band_B'] = _STATE['band_B']
+    _RUNTIME['band_R'] = str(_STATE['band_R'])
+    _RUNTIME['band_G'] = str(_STATE['band_G'])
+    _RUNTIME['band_B'] = str(_STATE['band_B'])
 
     print(f"Previous state loaded.")
 
@@ -993,9 +1070,13 @@ def main():
 
         if event == guiek_rgb_update_button:
             try:
-                _RUNTIME['band_R'] = int(values[guiek_r_input])
-                _RUNTIME['band_G'] = int(values[guiek_g_input])
-                _RUNTIME['band_B'] = int(values[guiek_b_input])
+                # Just try casting before continuing
+                _, _ = infer_runtime_RGB_value(values[guiek_r_input])
+                _, _ = infer_runtime_RGB_value(values[guiek_g_input])
+                _, _ = infer_runtime_RGB_value(values[guiek_b_input])
+                _RUNTIME['band_R'] = values[guiek_r_input] #int(values[guiek_r_input])
+                _RUNTIME['band_G'] = values[guiek_g_input] #int(values[guiek_g_input])
+                _RUNTIME['band_B'] = values[guiek_b_input] #int(values[guiek_b_input])
                 update_px_rgb_lines()
                 update_false_color_canvas()
             except ValueError as ve:
