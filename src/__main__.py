@@ -13,6 +13,7 @@ Refreshing plot: https://gist.github.com/KenoLeon/e913de9e1fe690ebe287e6d1e54e3b
 
 import os
 import math
+import logging
 
 import PySimpleGUI as sg
 import spectral.io.envi as envi
@@ -67,6 +68,9 @@ guiek_white_select_whole = "-WHITE SELECT WHOLE-"
 guiek_r_input = "-R-"
 guiek_g_input = "-G-"
 guiek_b_input = "-B-"
+guiek_r_wl_text = "-R WAVELENGTH-"
+guiek_g_wl_text = "-G WAVELENGTH-"
+guiek_b_wl_text = "-B WAVELENGTH-"
 guiek_rgb_update_button = "-RGB UPDATE BUTTON-"
 
 # Correction calculation buttons
@@ -158,12 +162,15 @@ cube_column = [
         sg.Text("R"),
         sg.In(size=(5, 1), key=guiek_r_input,
               tooltip="Band used for the red channel in the false color representation of the cube."),
+        sg.Text("---.-- nm", key=guiek_r_wl_text),
         sg.Text("G"),
         sg.In(size=(5, 1), key=guiek_g_input,
               tooltip="Band used for the green channel in the false color representation of the cube."),
+        sg.Text("---.-- nm", key=guiek_g_wl_text),
         sg.Text("B"),
         sg.In(size=(5, 1), key=guiek_b_input,
               tooltip="Band used for the blue channel in the false color representation of the cube."),
+        sg.Text("---.-- nm", key=guiek_b_wl_text),
         sg.Button('Update', enable_events=True, key=guiek_rgb_update_button,
                   tooltip="Update false color image and pixel plot to represent the selected bands.")
     ],
@@ -335,7 +342,17 @@ def mouse_release_event(eventi):
         update_UI_component_state()
 
 
-def infer_runtime_RGB_value(value :str):
+def infer_runtime_RGB_value(value: str):
+    """Proces the string that user has given as band selection or fill value.
+
+    Value is interpreted as band selection if one can directly cast it into an
+    integer. Otherwise, if it starts with character 'f' and the rest can be
+    cast to integer, the return value is (True, int).
+
+    :returns:
+        (bool, int) where the bool indicates if the int should be inferred as a fill value.
+        If False, the int should be inferred as a band number.
+    """
 
     should_fill = False
     if value.startswith('f'):
@@ -347,33 +364,47 @@ def infer_runtime_RGB_value(value :str):
     try:
         parsed_int = int(to_int)
     except ValueError as e:
-        print(f"Could not parse fill value from string '{value}'. Input a raw int or for filling, in format fXXX, where XXX can be interperted as an integer.")
+        print(f"Could not parse fill value from string '{value}'. Input a raw int or for filling an RGB channel with "
+              f"a single value, provide string in format fXXX.., where XXX.. can be interpreted as an integer.")
         raise
 
     return should_fill, parsed_int
 
 
 def update_px_rgb_lines():
+    """Update the vertical line positions for pixel plot to the _RUNTIME.
+
+    Additionally, updates the wavelength textblocks of selected bands.
+
+    NOTE
+    You should call update_px_plot() after calling this for the actual update on screen.
+    """
+
     for handle in _RUNTIME['rgb_handles']:
         handle.remove()
+
     _RUNTIME['rgb_handles'] = []
+    band_keys = ['band_R', 'band_G', 'band_B']
+    line_colors = ['red', 'green', 'blue']
 
-    should_fill, value = infer_runtime_RGB_value(_RUNTIME['band_R'])
-    if not should_fill:
-        handle_r = ax_px_plot.axvline(x=value, color='red')
-        _RUNTIME['rgb_handles'].append(handle_r)
+    for i in range(3):
+        should_fill, value = infer_runtime_RGB_value(_RUNTIME[band_keys[i]])
+        if not should_fill:
+            _RUNTIME['rgb_handles'].append(ax_px_plot.axvline(x=value, color=line_colors[i]))
 
-    should_fill, value = infer_runtime_RGB_value(_RUNTIME['band_G'])
-    if not should_fill:
-        handle_g = ax_px_plot.axvline(x=value, color='green')
-        _RUNTIME['rgb_handles'].append(handle_g)
+    update_band_wl_textblocks()
 
-    should_fill, value = infer_runtime_RGB_value(_RUNTIME['band_B'])
-    if not should_fill:
-        handle_b = ax_px_plot.axvline(x=value, color='blue')
-        _RUNTIME['rgb_handles'].append(handle_b)
 
-    update_px_plot()
+def update_band_wl_textblocks():
+
+    wl_textblock_keys = [guiek_r_wl_text, guiek_g_wl_text, guiek_b_wl_text]
+    band_keys = ['band_R', 'band_G', 'band_B']
+    for i in range(3):
+        should_fill, value = infer_runtime_RGB_value(_RUNTIME[band_keys[i]])
+        if not should_fill and _RUNTIME['cube_wls'] is not None:
+            _RUNTIME['window'][wl_textblock_keys[i]].update(f"{_RUNTIME['cube_wls'][value]:.2f} nm")
+        elif should_fill:
+            _RUNTIME['window'][wl_textblock_keys[i]].update(f"---.-- nm")
 
 
 def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None, x1=None, y1=None):
@@ -515,6 +546,10 @@ def update_false_color_canvas():
             print(f"RGB image after scaling; max value: {np.max(img_rgb)}, median: {np.median(img_rgb)}, mean: { np.mean(img_rgb)}")
 
         print(img_rgb.dtype)
+        logging.debug(f"Test DEBUG logging")
+        logging.info(f"Test INFO logging")
+        logging.warning(f"Test WARNING logging")
+        logging.error(f"Test ERROR logging")
 
         return img_rgb#.astype(np.float32)
 
@@ -707,6 +742,7 @@ def open_cube(hdr_path, data_path, mode):
 
     # Draw cube to canvas
     update_false_color_canvas()
+    update_band_wl_textblocks()
 
 
 def calc_dark():
@@ -874,7 +910,7 @@ def get_base_name_wo_postfix(path: str) -> str:
 
 
 def restore_from_previous_session():
-    """Partly restores UI to the state it was when last closed.
+    """Partially restores UI to the state it was when last closed.
 
     Loads all the cubes but does not do any corrections.
     """
@@ -1036,6 +1072,7 @@ def main():
                 _RUNTIME['band_G'] = values[guiek_g_input] #int(values[guiek_g_input])
                 _RUNTIME['band_B'] = values[guiek_b_input] #int(values[guiek_b_input])
                 update_px_rgb_lines()
+                update_px_plot()
                 update_false_color_canvas()
             except ValueError as ve:
                 print(f"WARNING: Failed casting band to an integer. False color image not updated.")
