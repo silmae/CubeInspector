@@ -480,71 +480,28 @@ def update_false_color_canvas():
 
     view_mode = _RUNTIME['view_mode']
 
-    def autoscale_int_image(image: np.array) -> np.array:
-        """Scale pixel values to 0-255, because otherwise Matplolib will just
-            clip them to that range.
-
-        :param image:
-            Image np.array to scale
-        :return:
-            Scaled image np.array
-        """
-
-        cmax = np.max(image)
-        print(f"Cube max value: {cmax} in int autoscale.")
-
-        if cmax > 255:
-            print(f"Autoscaling false color image.")
-            autoscaled = np.divide(image, cmax)
-            autoscaled = autoscaled * 255
-            autoscaled = autoscaled.astype(np.uint16)
-            return autoscaled
-        else:
-            return image.astype(np.uint16)
-
-    def autoscale_float_image(image: np.array) -> np.array:
-        """Scale pixel values to 0.0-1.0, because otherwise Matplolib will just
-            clip them to that range.
-
-        :param image:
-            Image np.array to scale
-        :return:
-            Scaled image np.array
-        """
-
-        cmax = np.max(image)
-        print(f"Cube max value: {cmax} in float autoscale.")
-
-        if cmax > 1.0:
-            print(f"Autoscaling false color image.")
-            autoscaled = np.divide(image, cmax, dtype=np.float32)
-            return autoscaled
-        else:
-            return image.astype(np.float32)
-
     def img_array_to_rgb(img_array: np.array, possible_R: str, possible_G: str, possible_B: str):
 
         max_band = img_array.shape[2] - 1
+        possibles = [possible_R, possible_G, possible_B]
+        # initialize rgb image as a list of separate one channel images
+        img_rgb = []
 
-        should_fill, value = infer_runtime_RGB_value(possible_R)
-        if should_fill:
-            img_R = np.ones_like(img_array[:, :, 0]) * value
-        else:
-            img_R = img_array[:, :, np.clip(value,0,max_band)]
+        for i in range(3):
 
-        should_fill, value = infer_runtime_RGB_value(possible_G)
-        if should_fill:
-            img_G = np.ones_like(img_array[:, :, 0]) * value
-        else:
-            img_G = img_array[:, :, np.clip(value,0,max_band)]
+            should_fill, value = infer_runtime_RGB_value(possibles[i])
 
-        should_fill, value = infer_runtime_RGB_value(possible_B)
-        if should_fill:
-            img_B = np.ones_like(img_array[:, :, 0]) * value
-        else:
-            img_B = img_array[:, :, np.clip(value,0,max_band)]
+            if should_fill:
+                img_X = np.ones_like(img_array[:, :, 0]) * value
+            else:
+                img_X = img_array[:, :, np.clip(value, 0, max_band)]
 
-        img_rgb = np.stack((img_R,img_G,img_B), axis=2)
+            img_rgb.append(img_X)
+
+        # Stack list of one channel images to make proper numpy array
+        img_rgb = np.stack(img_rgb, axis=2)
+
+        # Scale the image somehow in hope it will look sensible on the screen
         max_val = np.max(img_rgb)
         median = np.median(img_rgb)
         mean = np.mean(img_rgb)
@@ -554,7 +511,8 @@ def update_false_color_canvas():
             # img_rgb = img_rgb / (median * 2)
             # img_rgb = img_rgb / mean
             img_rgb = img_rgb / (max_val * 0.5)
-            print(f"RGB image after scaling; max value: {max_val}, median: {median}, mean: {mean}")
+            # img_rgb = np.sqrt(img_rgb)
+            print(f"RGB image after scaling; max value: {np.max(img_rgb)}, median: {np.median(img_rgb)}, mean: { np.mean(img_rgb)}")
 
         print(img_rgb.dtype)
 
