@@ -541,8 +541,11 @@ def update_false_color_canvas():
             print(f"Seems like we have big values (> 5), so I'll try to scale the RGB image a bit.")
             # img_rgb = img_rgb / (median * 2)
             # img_rgb = img_rgb / mean
-            img_rgb = img_rgb / (max_val * 0.5)
-            # img_rgb = np.sqrt(img_rgb)
+            # img_rgb = img_rgb / (max_val * 0.5)
+            histogram = np.histogram(img_rgb)
+            print(histogram)
+            img_rgb = img_rgb / 2000
+            img_rgb = np.sqrt(img_rgb)
             print(f"RGB image after scaling; max value: {np.max(img_rgb)}, median: {np.median(img_rgb)}, mean: { np.mean(img_rgb)}")
 
         print(img_rgb.dtype)
