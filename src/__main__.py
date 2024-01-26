@@ -494,6 +494,10 @@ def update_false_color_canvas():
     If not, get RGB from metadata.
     """
 
+    if _RUNTIME['cube_data'] is None:
+        print(f"Cube not set. Nothing to clear.")
+        return
+
     possibly_R_str = str(_RUNTIME['band_R'])
     possibly_G_str = str(_RUNTIME['band_G'])
     possibly_B_str = str(_RUNTIME['band_B'])
