@@ -90,6 +90,14 @@ guiek_console_output = "-CONSOLE-"
 # Save cube button
 guiek_save_cube = "-SAVE CUBE-"
 
+# Pixel plot component handles
+guiek_clear_button = "-CLEAR-"
+guiek_spectral_min_input = "-SPECTRAL MIN INPUT-"
+guiek_spectral_max_input = "-SPECTRAL MAX INPUT-"
+guiek_spectal_clip_min_wl_text = "-SPECTRAL CLIP MIN TEXT WL-"
+guiek_spectal_clip_max_wl_text = "-SPECTRAL CLIP MAX TEXT WL-"
+guiek_spectral_clip_button = "-SPECTRAL CLIP-"
+
 # Pixel plot
 fig_px_plot = plt.figure(figsize=(5, 4), dpi=100)
 ax_px_plot = fig_px_plot.add_subplot(111)
@@ -178,7 +186,16 @@ cube_column = [
 
 pixel_plot_column = [
     [sg.Canvas(key=guiek_pixel_plot_canvas)],
-    [sg.Button("Clear")]
+    [
+        sg.Button("Clear", key=guiek_clear_button),
+        sg.Text("Min: "),
+        sg.In(size=(5,1), key=guiek_spectral_min_input, tooltip="Spectral range low clip."),
+        sg.Text("---.-- nm", key=guiek_spectal_clip_min_wl_text),
+        sg.Text("Max: "),
+        sg.In(size=(5,1), key=guiek_spectral_max_input, tooltip="Spectral range high clip."),
+        sg.Text("---.-- nm", key=guiek_spectal_clip_max_wl_text),
+        sg.Button("Clip", key=guiek_spectral_clip_button, enable_events=True)
+    ]
 ]
 
 layout = [
@@ -250,6 +267,9 @@ _RUNTIME = {
     'band_B': '', # string
     'band_G': '', # string
     'band_R': '', # string
+
+    'spectral_clip_min': 0,
+    'spectral_clip_max': 0,
 
     'plots': [],
 }
@@ -342,6 +362,38 @@ def mouse_release_event(eventi):
         update_UI_component_state()
 
 
+def infer_runtime_spectral_clip(min_value: str, max_value: str):
+    """
+
+    :param min_value:
+    :param max_value:
+    :return:
+    :raises:
+        ValueError if min > max.
+    """
+
+    if min_value is None or len(min_value) < 0 or max_value is None or len(max_value) < 0:
+        raise ValueError(f"Either min or max value was not provided.")
+
+    min_int = int(min_value)
+    max_int = int(max_value)
+
+    if min_int < 0 or max_int < 0:
+        raise ValueError(f"Negative values not allowed. Min was ({min_int}) and max ({max_int}).")
+
+    if min_int > max_int:
+        raise ValueError(f"Clipping min ({min_int}) greater than max ({max_int}).")
+
+    if _RUNTIME['cube_data'] is None:
+        raise RuntimeError(f"No cube selected: I will not set clipping for you.")
+
+    bands = _RUNTIME['cube_bands']
+    actual_min = np.clip(min_int, bands[0], bands[-1])
+    actual_max = np.clip(max_int, bands[0], bands[-1])
+    _RUNTIME['spectral_clip_min'] = actual_min
+    _RUNTIME['spectral_clip_max'] = actual_max
+
+
 def infer_runtime_RGB_value(value: str):
     """Proces the string that user has given as band selection or fill value.
 
@@ -407,6 +459,12 @@ def update_band_wl_textblocks():
             _RUNTIME['window'][wl_textblock_keys[i]].update(f"---.-- nm")
 
 
+def update_spectral_clip_wl_text():
+    guiek_spectal_clip_min_wl_text
+    _RUNTIME['window'][guiek_spectal_clip_min_wl_text].update(f"{_RUNTIME['cube_wls'][_RUNTIME['spectral_clip_min']]:.2f} nm")
+    _RUNTIME['window'][guiek_spectal_clip_max_wl_text].update(f"{_RUNTIME['cube_wls'][_RUNTIME['spectral_clip_max']]:.2f} nm")
+
+
 def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None, x1=None, y1=None):
     """Update the pixel plot canvas when clicking or dragging over false color RGB canvas.
 
@@ -427,6 +485,8 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
 
     # Draw new plot and refersh canvas
     _RUNTIME['fig_agg_px_plot'].get_tk_widget().forget()
+    ax_px_plot.set_xlim(_RUNTIME['spectral_clip_min'], _RUNTIME['spectral_clip_max'])
+    update_spectral_clip_wl_text()
 
     # Plot the plot and save it. Update
     if spectrum is not None:
@@ -448,7 +508,6 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
     if bands is not None and wls is not None and _RUNTIME['sec_axes_px_plot'] is None:
 
         ax_px_plot.set_xlabel('Band')
-        ax_px_plot.set_xlim(bands[0], bands[-1])
 
         def forward(x):
             return np.interp(x, bands, wls)
@@ -625,6 +684,9 @@ def cube_meta():
             _RUNTIME['cube_wls'] = np.array(list(float(v) for v in value))
             # print(_VARS['cube_wls'])
             _RUNTIME['cube_bands'] = np.arange(start=0, stop=len(value), step=1)
+            _RUNTIME['spectral_clip_min'] = 0
+            _RUNTIME['spectral_clip_max'] = len(value) - 1
+            update_spectral_clip_wl_text()
             # print(f"len wls: {len(_VARS['cube_wls'])}")
             # print(f"len bands: {len(_VARS['cube_bands'])}")
             walength_set = True
@@ -908,6 +970,9 @@ def update_UI_component_state():
     window[guiek_g_input].update(str(_RUNTIME['band_G']))
     window[guiek_b_input].update(str(_RUNTIME['band_B']))
 
+    window[guiek_spectral_min_input].update(str(_RUNTIME['spectral_clip_min']))
+    window[guiek_spectral_max_input].update(str(_RUNTIME['spectral_clip_max']))
+
 
 def get_base_name_wo_postfix(path: str) -> str:
     """Returns the file name in given path without the postfix such as .hdr."""
@@ -1021,8 +1086,15 @@ def main():
         if event == "Exit" or event == sg.WIN_CLOSED:
             break
 
-        if event == "Clear":
+        if event == guiek_clear_button:
             clear_plot()
+
+        if event == guiek_spectral_clip_button:
+            try:
+                infer_runtime_spectral_clip(values[guiek_spectral_min_input], values[guiek_spectral_max_input])
+                update_px_plot()
+            except Exception as e:
+                print(f"Could not set clip value: \n {e}")
 
         if event == guiek_cube_file_browse:
             window[guiek_cube_show_filename].update(value=get_base_name_wo_postfix(values[guiek_cube_file_browse]))
