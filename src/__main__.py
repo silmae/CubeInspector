@@ -507,6 +507,11 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
 
     if bands is not None and wls is not None and _RUNTIME['sec_axes_px_plot'] is None:
 
+        # Hack to print into light form for HyperBlend
+        # s_max = np.max(spectrum)
+        # for i,wl in enumerate(wls):
+        #     print(f"{wl:.4} {spectrum[i]/s_max:.9}")
+
         ax_px_plot.set_xlabel('Band')
 
         def forward(x):
@@ -595,29 +600,35 @@ def update_false_color_canvas():
         # Stack list of one channel images to make proper numpy array
         img_rgb = np.stack(img_rgb, axis=2)
 
-        # Scale the image somehow in hope it will look sensible on the screen
-        max_val = np.max(img_rgb)
-        median = np.median(img_rgb)
-        mean = np.mean(img_rgb)
-        print(f"RGB image max value: {max_val}, median: {median}, mean: {mean}")
-        if max_val > 5:
-            print(f"Seems like we have big values (> 5), so I'll try to scale the RGB image a bit.")
-            # img_rgb = img_rgb / (median * 2)
-            # img_rgb = img_rgb / mean
-            # img_rgb = img_rgb / (max_val * 0.5)
-            histogram = np.histogram(img_rgb)
-            print(histogram)
-            img_rgb = img_rgb / 2000
-            img_rgb = np.sqrt(img_rgb)
-            print(f"RGB image after scaling; max value: {np.max(img_rgb)}, median: {np.median(img_rgb)}, mean: { np.mean(img_rgb)}")
+        """
+        Scale the image somehow in hope it will look sensible on the screen
 
-        print(img_rgb.dtype)
-        logging.debug(f"Test DEBUG logging")
-        logging.info(f"Test INFO logging")
-        logging.warning(f"Test WARNING logging")
-        logging.error(f"Test ERROR logging")
+        Take a histogram of the RGB image and use one of the bin edges near the end 
+        to scale the pixel values down. This should let some of the brightest pixels (specular 
+        reflections) to clip so that they do not make the whole image too dark.              
+        """
 
-        return img_rgb#.astype(np.float32)
+        logging.info(f"RGB image max value: {np.max(img_rgb)}, median: { np.median(img_rgb)}, mean: {np.mean(img_rgb)}")
+
+        # Arbitrary bin count that seems to work OK
+        histogram, bin_edges = np.histogram(img_rgb, bins=10)
+
+        # Arbitrary selection of the cut point. Could be done better using the derivative of the histogram?
+        scale = bin_edges[-3]
+
+        # Debugging print out of the bin edges in case the binning needs to be adjusted later.
+        # for i,bin_edge in enumerate(bin_edges):
+        #     if i > 0:
+        #         print(f"Bin edges: {bin_edge} val {histogram[i-1]}")
+
+        logging.info(f"I'll try to scale the RGB image down by {scale:.2f} before gamma correction.")
+
+        img_rgb = img_rgb / scale
+        img_rgb = np.sqrt(img_rgb)
+
+        logging.info(f"RGB image after scaling; max value: {np.max(img_rgb)}, median: {np.median(img_rgb)}, mean: { np.mean(img_rgb)}")
+
+        return img_rgb
 
     if view_mode == 'cube' and not _RUNTIME['selecting_white']:
 
@@ -962,7 +973,7 @@ def update_UI_component_state():
             else:
                 window[guiek_calc_white].update(disabled=True)
 
-        if _RUNTIME['white_corrected'] and _RUNTIME['dark_corrected']:
+        if _RUNTIME['white_corrected'] or _RUNTIME['dark_corrected']:
             window[guiek_save_cube].update(disabled=False)
 
     # Update the RGB inboxes as well
@@ -1058,9 +1069,13 @@ def handle_white_file_selected(file_path: str):
 
 def save_reflectance_cube():
     basepath = str(_STATE['main_cube_hdr_path']).rsplit('.', maxsplit=1)[0]
-    save_hdr_path = f"{basepath}_CI_reflectance.hdr"
-    print(f"Trying to save reflectance cube header to '{save_hdr_path}'.")
+    if _RUNTIME['white_corrected']:
+        save_hdr_path = f"{basepath}_CI_reflectance.hdr"
+    elif _RUNTIME['dark_corrected']:
+        save_hdr_path = f"{basepath}_CI_darkcorrected.hdr"
+    print(f"Trying to save cube to '{save_hdr_path}'.")
     spy.envi.save_image(hdr_file=save_hdr_path, image=_RUNTIME['img_array'], dtype=np.float32, ext='.dat', metadata=_RUNTIME['cube_data'].metadata)
+    print(f"Cube saved.")
 
 
 def main():
