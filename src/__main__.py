@@ -636,14 +636,7 @@ def update_false_color_canvas():
             print(f"Image array None. Nothing to show.")
             return
 
-        if _RUNTIME['white_corrected']:
-            # false_color_rgb = _RUNTIME['img_array'][:, :, rgb_bands].astype(np.float32)
-            # # false_color_rgb = autoscale_float_image(false_color_rgb)
-            false_color_rgb = img_array_to_rgb(_RUNTIME['img_array'], possibly_R_str, possibly_G_str, possibly_B_str)
-        else:
-            # false_color_rgb = _RUNTIME['img_array'][:, :, rgb_bands].astype(np.uint16)
-            # false_color_rgb = autoscale_int_image(false_color_rgb)
-            false_color_rgb = img_array_to_rgb(_RUNTIME['img_array'], possibly_R_str, possibly_G_str, possibly_B_str)
+        false_color_rgb = img_array_to_rgb(_RUNTIME['img_array'], possibly_R_str, possibly_G_str, possibly_B_str)
 
     elif view_mode == 'dark':
 
@@ -651,8 +644,6 @@ def update_false_color_canvas():
             print(f"Image array for dark is None. Nothing to show.")
             return
 
-        # false_color_rgb = _RUNTIME['img_array_dark'][:, :, rgb_bands].astype(np.uint16)
-        # false_color_rgb = autoscale_int_image(false_color_rgb)
         false_color_rgb = img_array_to_rgb(_RUNTIME['img_array_dark'], possibly_R_str, possibly_G_str, possibly_B_str)
 
     elif view_mode == 'white' or _RUNTIME['selecting_white']:
@@ -661,8 +652,6 @@ def update_false_color_canvas():
             print(f"Image array for white is None. Nothing to show.")
             return
 
-        # false_color_rgb = _RUNTIME['img_array_white'][:, :, rgb_bands].astype(np.uint16)
-        # false_color_rgb = autoscale_int_image(false_color_rgb)
         false_color_rgb = img_array_to_rgb(_RUNTIME['img_array_white'], possibly_R_str, possibly_G_str, possibly_B_str)
     else:
         print(f"WARNING: unknown view mode '{view_mode}' and/or selection combination selecting "
@@ -670,6 +659,9 @@ def update_false_color_canvas():
         return
 
     _RUNTIME['fig_agg_false_color'].get_tk_widget().forget()
+    # Clear axis object because if the next image is of different size,
+    # it will break pixel indexing for mouse selection
+    ax_false_color.cla()
     ax_false_color.imshow(false_color_rgb)
     ax_false_color.set_xlabel('Samples')
     ax_false_color.set_ylabel('Lines')
@@ -805,6 +797,7 @@ def open_cube(hdr_path, data_path, mode):
 
         # Set things up using metadata
         # TODO this should work even if the cube is not selected? Perhaps not as it doesn't make much sense.
+        clear_plot()
         cube_meta()
 
     elif mode == 'dark':
