@@ -314,7 +314,6 @@ def mouse_release_event(eventi):
     if eventi.button == 1:
         x0 = _RUNTIME['rect_x_0']
         y0 = _RUNTIME['rect_y_0']
-
         y = eventi.ydata
         x = eventi.xdata
 
@@ -328,6 +327,9 @@ def mouse_release_event(eventi):
             drag_start_y = int(min(y, y0))
             drag_end_x = int(max(x, x0))
             drag_end_y = int(max(y, y0))
+
+            print(f"Mouse drag from ({int(drag_start_x)},{int(drag_start_y)}) to ({int(drag_end_x)},{int(drag_end_y)}).")
+
             rows = list(np.arange(start=drag_start_x, stop=drag_end_x, step=1))
             cols = list(np.arange(start=drag_start_y, stop=drag_end_y, step=1))
 
@@ -356,6 +358,7 @@ def mouse_release_event(eventi):
             _RUNTIME['rect_x_0'] = None
             _RUNTIME['rect_y_0'] = None
             pixel = _RUNTIME['img_array'][int(y), int(x)]
+            print(f"Mouse click at ({int(x)},{int(y)}).")
             update_px_rgb_lines()
             update_px_plot(spectrum=pixel, x0=x, y0=y)
 
