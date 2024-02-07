@@ -11,6 +11,12 @@ Github project PySimpleGUI: https://github.com/PySimpleGUI/PySimpleGUI
 Refreshing plot: https://gist.github.com/KenoLeon/e913de9e1fe690ebe287e6d1e54e3b97
 """
 
+# import diffbox
+#
+# diffbox.thing()
+#
+# exit(0)
+
 import os
 import math
 import logging
@@ -964,7 +970,7 @@ def update_UI_component_state():
             window[guiek_white_show_button].update(disabled=False)
             window[guiek_white_select_region].update(disabled=False)
             window[guiek_white_select_whole].update(disabled=False)
-            if not _RUNTIME['white_corrected'] and _RUNTIME['white_spectra'] is not None and _RUNTIME['dark_corrected']:
+            if not _RUNTIME['white_corrected'] and _RUNTIME['white_spectra'] is not None:# and _RUNTIME['dark_corrected']:
                 window[guiek_calc_white].update(disabled=False)
             else:
                 window[guiek_calc_white].update(disabled=True)
@@ -1070,8 +1076,19 @@ def save_reflectance_cube():
     elif _RUNTIME['dark_corrected']:
         save_hdr_path = f"{basepath}_CI_darkcorrected.hdr"
     print(f"Trying to save cube to '{save_hdr_path}'.")
-    spy.envi.save_image(hdr_file=save_hdr_path, image=_RUNTIME['img_array'], dtype=np.float32, ext='.dat', metadata=_RUNTIME['cube_data'].metadata)
-    print(f"Cube saved.")
+    try:
+        spy.envi.save_image(hdr_file=save_hdr_path, image=_RUNTIME['img_array'], dtype=np.float32, ext='.dat', metadata=_RUNTIME['cube_data'].metadata)
+        print(f"Cube saved.")
+
+    except envi.EnviException as e:
+        answer = sg.PopupYesNo("Cube already exists with that file name. \n Do you want to override it?")
+        if answer == 'Yes':
+            spy.envi.save_image(hdr_file=save_hdr_path, image=_RUNTIME['img_array'], dtype=np.float32, ext='.dat',
+                                metadata=_RUNTIME['cube_data'].metadata, force=True)
+            print(f"Cube saved. Old cube was overriden.")
+        else:
+            print(f"User cancelled saving.")
+
 
 
 def main():
