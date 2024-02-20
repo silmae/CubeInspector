@@ -16,5 +16,5 @@ dependencies:
   - pip:
       - spectral # for image cube read and write
       #- spectres # for resampling spectra
-      - pysimplegui
+      - pysimplegui==4.60.5 #Force newest version (4.60.5) before they enforced subscribing to use 5.0 onwards.
       - pyinstaller
