@@ -1097,62 +1097,62 @@ def main():
         if event == "Exit" or event == sg.WIN_CLOSED:
             break
 
-        if event == guiek_clear_button:
+        elif event == guiek_clear_button:
             clear_plot()
 
-        if event == guiek_spectral_clip_button:
+        elif event == guiek_spectral_clip_button:
             try:
                 infer_runtime_spectral_clip(values[guiek_spectral_min_input], values[guiek_spectral_max_input])
                 update_px_plot()
             except Exception as e:
                 print(f"Could not set clip value: \n {e}")
 
-        if event == guiek_cube_file_browse:
+        elif event == guiek_cube_file_browse:
             window[guiek_cube_show_filename].update(value=get_base_name_wo_postfix(values[guiek_cube_file_browse]))
             handle_cube_file_selected(values[guiek_cube_file_browse])
 
-        if event == guiek_dark_file_browse:
+        elif event == guiek_dark_file_browse:
             window[guiek_dark_show_filename].update(value=get_base_name_wo_postfix(values[guiek_dark_file_browse]))
             handle_dark_file_selected(values[guiek_dark_file_browse])
 
-        if event == guiek_white_file_browse:
+        elif event == guiek_white_file_browse:
             window[guiek_white_show_filename].update(value=get_base_name_wo_postfix(values[guiek_white_file_browse]))
             handle_white_file_selected(values[guiek_white_file_browse])
 
-        if event == guiek_cube_show_button:
+        elif event == guiek_cube_show_button:
             _RUNTIME['view_mode'] = 'cube'
             update_false_color_canvas()
 
-        if event == guiek_dark_show_button:
+        elif event == guiek_dark_show_button:
             _RUNTIME['view_mode'] = 'dark'
             update_false_color_canvas()
 
-        if event == guiek_white_show_button:
+        elif event == guiek_white_show_button:
             _RUNTIME['view_mode'] = 'white'
             update_false_color_canvas()
 
-        if event == guiek_white_select_region:
+        elif event == guiek_white_select_region:
             _RUNTIME['selecting_white'] = True
             print(f"White region selection is now on. Drag across the image to select an "
                   f"area which will be used as a white reference.")
 
-        if event == guiek_white_select_whole:
+        elif event == guiek_white_select_whole:
             white_array = _RUNTIME['img_array_white']
             white_mean = np.mean(white_array, axis=(0,1))
             _RUNTIME['white_spectra'] = white_mean
             print(f"White reference spectra set. You can now use the Calculate button to "
                   f"calculate reflectance.")
 
-        if event == guiek_calc_dark:
+        elif event == guiek_calc_dark:
             calc_dark()
 
-        if event == guiek_calc_white:
+        elif event == guiek_calc_white:
             calc_white()
 
-        if event == guiek_save_cube:
+        elif event == guiek_save_cube:
             save_reflectance_cube()
 
-        if event == guiek_rgb_update_button:
+        elif event == guiek_rgb_update_button:
             try:
                 # Just try casting before continuing
                 _, _ = infer_runtime_RGB_value(values[guiek_r_input])
@@ -1166,6 +1166,9 @@ def main():
                 update_false_color_canvas()
             except ValueError as ve:
                 print(f"WARNING: Failed casting band to an integer. False color image not updated.")
+
+        else:
+            print("We should not have arrived in here in the main loop iffing.")
 
         # Update UI after every event is handled.
         update_UI_component_state()
