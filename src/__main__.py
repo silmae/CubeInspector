@@ -20,7 +20,7 @@
 
 
 #sg.Push
-#sg.vPush
+#sg.VPush
 #sg.sizegrip
 
 
@@ -128,19 +128,19 @@ fig_px_plot = plt.figure(figsize=(5, 4), dpi=100)
 ax_px_plot = fig_px_plot.add_subplot(111)
 
 # False color imshow
-fig_false_color = plt.figure(figsize=(5, 4), dpi=100)
+fig_false_color = plt.figure(figsize=(6, 6), dpi=100)
 ax_false_color = fig_false_color.add_subplot(111)
 
 
 # Layout stuff #############
 
+multiline_size = (50,15)
+
 cube_meta_column = [
-    [
-        sg.Text("Cube metadata"),
-    ],
-    [
-        sg.Multiline(size=(50, 15), key=guiek_cube_meta_text),
-    ],
+    [sg.Push(),sg.Text("Cube metadata"),sg.Push()],
+    [sg.Multiline(size=multiline_size, key=guiek_cube_meta_text),],
+    [sg.Push(),sg.Text("Output"),sg.Push()],
+    [sg.Multiline(size=multiline_size, reroute_stdout=True, k=guiek_console_output, autoscroll=True,horizontal_scroll=True),],
 ]
 
 
@@ -232,8 +232,9 @@ layout = [
         sg.Column(pixel_plot_column),
     ],
     [sg.HSeparator()],
+    [sg.VPush()],
     [
-        sg.Multiline(size=(120, 15), reroute_stdout=True, k=guiek_console_output, autoscroll=True, horizontal_scroll=True),
+        sg.Push(),
         sg.Button("Save", key=guiek_save_cube, enable_events=True, disabled=True,
                   tooltip="Saves the main cube as reflectance cube (with .dat extension). Only available \n"
                           "after dark and white corrections are calculated. Not available for precomputed \n "
@@ -241,7 +242,7 @@ layout = [
     ],
 ]
 
-window = sg.Window("Cube Inspector", layout=layout, margins=(100,100), finalize=True)
+window = sg.Window("Cube Inspector", layout=layout, margins=(100,100), finalize=True, resizable=True)
 window[guiek_console_output].Widget.configure(wrap='none')
 
 
