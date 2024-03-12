@@ -21,3 +21,6 @@ No logs though at the moment.
 - Can select the bands used for RGB false color representation from the UI.
   You can also fill one or more RGB channels with an int by typing e.g. "f0" to
   fill with zero.
+
+
+  
