@@ -1,5 +1,30 @@
 """
 
+#Ohjeita
+
+#fle ex -> koodit  -> open git bash here
+#tarkasta branchi (lue)
+#git status - onko fine, onko mitään punaisella jne
+#git pull - jos joku on tehnyt muutoksia, saadaan tuorein versio
+#avaa pycharm
+
+#mutoksia tapahtuu
+#tallenna
+
+#töiden lopetus
+#git status
+#git commit -am 'tähän kommentti'
+#git status - varmistetaan onko ok
+#git push
+#salasana
+
+
+#sg.Push
+#sg.vPush
+#sg.sizegrip
+
+
+
 Cube Inspector is almost fully implemented in this one main file.
 
 
