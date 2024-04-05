@@ -136,12 +136,22 @@ ax_false_color = fig_false_color.add_subplot(111)
 
 multiline_size = (50,15)
 
+frame_layout_cube_meta = [
+    [sg.Multiline(size=multiline_size, key=guiek_cube_meta_text),]]
+frame_layout_ouput = [
+    [sg.Multiline(size=multiline_size, reroute_stdout=True, k=guiek_console_output, autoscroll=True,horizontal_scroll=True),]]
+
 cube_meta_column = [
-    [sg.Push(),sg.Text("Cube metadata"),sg.Push()],
-    [sg.Multiline(size=multiline_size, key=guiek_cube_meta_text),],
-    [sg.Push(),sg.Text("Output"),sg.Push()],
-    [sg.Multiline(size=multiline_size, reroute_stdout=True, k=guiek_console_output, autoscroll=True,horizontal_scroll=True),],
-]
+    [sg.Frame("Cube metadata", frame_layout_cube_meta, expand_x=True, expand_y=True)],
+    [sg.Frame("Output", frame_layout_ouput, expand_x=True, expand_y=True)]]
+
+
+#cube_meta_column = [
+    #[sg.Push(),sg.Text("Cube metadata"),sg.Push()],
+    #[sg.Multiline(size=multiline_size, key=guiek_cube_meta_text),],
+    #[sg.Push(),sg.Text("Output"),sg.Push()],
+    #[sg.Multiline(size=multiline_size, reroute_stdout=True, k=guiek_console_output, autoscroll=True,horizontal_scroll=True),],
+#]
 
 
 cube_column = [
@@ -225,11 +235,11 @@ pixel_plot_column = [
 
 layout = [
     [
-        sg.Column(cube_meta_column),
+        sg.Column(cube_meta_column, expand_x=True, expand_y=True),
         sg.VSeperator(),
-        sg.Column(cube_column),
+        sg.Column(cube_column, expand_x=True, expand_y=True),
         sg.VSeperator(),
-        sg.Column(pixel_plot_column),
+        sg.Column(pixel_plot_column,  pad=(0, 100), expand_x=True, expand_y=True),
     ],
     [sg.HSeparator()],
     [sg.VPush()],
@@ -244,6 +254,18 @@ layout = [
 
 window = sg.Window("Cube Inspector", layout=layout, margins=(100,100), finalize=True, resizable=True)
 window[guiek_console_output].Widget.configure(wrap='none')
+
+#resize canvases, cube metadata and output
+for i in [guiek_cube_false_color]:
+    window[guiek_cube_false_color].expand(expand_x=True, expand_y=True)
+for i in [guiek_pixel_plot_canvas]:
+    window[guiek_pixel_plot_canvas].expand(expand_x=True, expand_y=True)
+for i in [guiek_cube_meta_text]:
+    window[guiek_cube_meta_text].expand(expand_x=True, expand_y=True)
+for i in [guiek_console_output]:
+    window[guiek_console_output].expand(expand_x=True, expand_y=True)
+
+window.Maximize()
 
 
 def draw_figure(canvas, figure):
