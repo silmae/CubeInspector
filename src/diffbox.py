@@ -8,29 +8,33 @@ import math
 TODO kirjota kokonaan uudestaan. Tää on jotenki ihan päin helvettiä.
 """
 
-val_measurement_s1_v_13_dL = {
-    'hdr_path': "D:/Koodi/Python/HyperBlend/Algae spectral images/Algae_imaging_Algae_1_1.3_L_2023-11-30_12-22-04/capture\\Algae_imaging_Algae_1_1.3_L_2023-11-30_12-22-04_CI_reflectance.hdr",
-    'data_path': "D:/Koodi/Python/HyperBlend/Algae spectral images/Algae_imaging_Algae_1_1.3_L_2023-11-30_12-22-04/capture\\Algae_imaging_Algae_1_1.3_L_2023-11-30_12-22-04_CI_reflectance.dat",
-    'x0': 500,
-    'y0': 170,
-    'x1': 502,
-    'y1': 632,
-    'band_b': 40,
-    'band_r': 190,
+mes_y_adj = 20
+
+val_measurement = {
+    'hdr_path': "D:/Koodi/Python/HyperBlend/Algae spectral images/11_04_2024/Algae/021/capture/021_CI_darkcorrected.hdr",
+    'data_path': "D:/Koodi/Python/HyperBlend/Algae spectral images/11_04_2024/Algae/021/capture/021_CI_darkcorrected.dat",
+    'x0': 100,
+    'y0': 100+mes_y_adj,
+    'x1': 180,
+    'y1': 360+mes_y_adj,
+    'band_b': 18,
+    'band_r': 90,
 }
 # Mouse drag from (497,170) to (542,632).
 
 # x- suuntaan Mouse drag from (370,378) to (672,441).
 
-val_simulated_s1_v_13_dL = {
-    'hdr_path': "D:/Koodi/Python/HyperBlend/HyperBlend/scenes/scene_validation_algae_1_v_1.3L/cube\\reflectance_cube_validation_algae_1_v_1.3L_CI_reflectance.hdr",
-    'data_path': "D:/Koodi/Python/HyperBlend/HyperBlend/scenes/scene_validation_algae_1_v_1.3L/cube\\reflectance_cube_validation_algae_1_v_1.3L_CI_reflectance.dat",
-    'x0': 200,
-    'y0': 75,
-    'x1': 202,
-    'y1': 320,
-    'band_b': 40,
-    'band_r': 250,
+sim_y_adj = 0
+
+val_simulated = {
+    'hdr_path': "D:/Koodi/Python/HyperBlend/HyperBlend/scenes/scene_validation_growth_bottle_low_res/cube/reflectance_cube_validation_growth_bottle_low_res.hdr",
+    'data_path': "D:/Koodi/Python/HyperBlend/HyperBlend/scenes/scene_validation_growth_bottle_low_res/cube/reflectance_cube_validation_growth_bottle_low_res.img",
+    'x0': 110,
+    'y0': 100+sim_y_adj,
+    'x1': 180,
+    'y1': 360+sim_y_adj,
+    'band_b': 5,
+    'band_r': 26,
 }
 
 
@@ -53,7 +57,7 @@ def get_diff_box(dict_sel: dict, swap=False):
     # sub_image_r = np.mean(img_array[x0:x1,y0:y1,band_r-r:band_r+r], axis=2)
     sub_image_r = img_array[x0:x1,y0:y1,band_r]
     sub_image = np.stack((sub_image_b,sub_image_r), axis=2)
-    sub_image_max = np.max(sub_image)
+    # sub_image_max = np.max(sub_image)
     sub_image_mean = np.mean(sub_image, axis=0)
     sub_image_mean = sub_image_mean / sub_image_mean.max()
     sub_image_var = np.var(sub_image, axis=0)
@@ -62,8 +66,8 @@ def get_diff_box(dict_sel: dict, swap=False):
     return sub_image_mean, sub_image_var, x_axis
 
 
-def thing():
-    sub_image_mean, sub_image_var, x_sim = get_diff_box(val_simulated_s1_v_13_dL, swap=True)
+def plot_comparison():
+    sub_image_mean, sub_image_var, x_sim = get_diff_box(val_simulated, swap=True)
 
     for i in range(2):
         mean = sub_image_mean[:,i]
@@ -81,12 +85,15 @@ def thing():
         plt.plot(mean, label=plot_label, color=color, linestyle=ls)
         # plt.fill_between(x_axis, mean - (var / 2), mean + (var / 2), alpha=0.2)
 
-    sub_image_mean, sub_image_var, x_axis = get_diff_box(val_measurement_s1_v_13_dL)
+    # IQ image is oriented differently from simulated image so we have to swap x and y axis
+    sub_image_mean, sub_image_var, x_axis = get_diff_box(val_measurement, swap=True)
 
     for i in range(2):
         mean = sub_image_mean[:, i]
         var = sub_image_var[:, i]
-        mean = np.interp(x_sim, x_axis, mean)
+
+        # Interpolate measured mean spectra to be as long as the simulation
+        # mean = np.interp(x_sim, x_axis, mean)
 
         if i == 0:
             plot_label = 'blue measured'

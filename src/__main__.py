@@ -13,7 +13,7 @@ Refreshing plot: https://gist.github.com/KenoLeon/e913de9e1fe690ebe287e6d1e54e3b
 
 # import diffbox
 #
-# diffbox.thing()
+# diffbox.plot_comparison()
 #
 # exit(0)
 
@@ -1198,3 +1198,4 @@ def main():
 if __name__ == '__main__':
 
     main()
+    print("Doing nothing")
