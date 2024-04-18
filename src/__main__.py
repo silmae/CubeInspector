@@ -256,14 +256,20 @@ window = sg.Window("Cube Inspector", layout=layout, margins=(100,100), finalize=
 window[guiek_console_output].Widget.configure(wrap='none')
 
 #resize canvases, cube metadata and output
-for i in [guiek_cube_false_color]:
-    window[guiek_cube_false_color].expand(expand_x=True, expand_y=True)
-for i in [guiek_pixel_plot_canvas]:
-    window[guiek_pixel_plot_canvas].expand(expand_x=True, expand_y=True)
-for i in [guiek_cube_meta_text]:
-    window[guiek_cube_meta_text].expand(expand_x=True, expand_y=True)
-for i in [guiek_console_output]:
-    window[guiek_console_output].expand(expand_x=True, expand_y=True)
+"""
+We don't need the for loops here as they are single elements. 
+Should figure out a way to resize without losing the buttons. And 
+maybe set a minimum size for the window. Good work! We continue from 
+here. - Kimmo 
+"""
+# for i in [guiek_cube_false_color]:
+window[guiek_cube_false_color].expand(expand_x=True, expand_y=True)
+# for i in [guiek_pixel_plot_canvas]:
+window[guiek_pixel_plot_canvas].expand(expand_x=True, expand_y=True)
+# for i in [guiek_cube_meta_text]:
+window[guiek_cube_meta_text].expand(expand_x=True, expand_y=True)
+# for i in [guiek_console_output]:
+window[guiek_console_output].expand(expand_x=True, expand_y=True)
 
 window.Maximize()
 
