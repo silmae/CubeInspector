@@ -816,8 +816,6 @@ def find_cube(path: str, mode: str):
         if fn_wo_postfix == base_name and (file_name.lower().endswith(".dat") or file_name.lower().endswith(".img")):
             reflectance_found = True
             cube_file_name = file_name
-            # We managed to find a proper file, so might as well set the path to memory for saving plots
-            _RUNTIME['cube_dir_path'] = selected_dir_path
 
     if hdr_found and (raw_found or reflectance_found):
         print(f"Envi cube files OK. ")
@@ -842,6 +840,8 @@ def find_cube(path: str, mode: str):
         else:
             print(f"ERROR Unsupported mode '{mode}' for find_cube().")
 
+        # We managed to find a proper file, so might as well set the path to memory for saving plots
+        _RUNTIME['cube_dir_path'] = selected_dir_path
         open_cube(hdr_path=hdr_path, data_path=raw_path, mode=mode)
     else:
         print(f"Not OK. Either hdr or raw file not found from given directory.")
