@@ -1,5 +1,30 @@
 """
 
+#Ohjeita
+
+#fle ex -> koodit  -> open git bash here
+#tarkasta branchi (lue)
+#git status - onko fine, onko mitään punaisella jne
+#git pull - jos joku on tehnyt muutoksia, saadaan tuorein versio
+#avaa pycharm
+
+#mutoksia tapahtuu
+#tallenna
+
+#töiden lopetus
+#git status
+#git commit -am 'tähän kommentti'
+#git status - varmistetaan onko ok
+#git push
+#salasana
+
+
+#sg.Push
+#sg.VPush
+#sg.sizegrip
+
+
+
 Cube Inspector is almost fully implemented in this one main file.
 
 
@@ -103,20 +128,30 @@ fig_px_plot = plt.figure(figsize=(5, 4), dpi=100)
 ax_px_plot = fig_px_plot.add_subplot(111)
 
 # False color imshow
-fig_false_color = plt.figure(figsize=(5, 4), dpi=100)
+fig_false_color = plt.figure(figsize=(6, 6), dpi=100)
 ax_false_color = fig_false_color.add_subplot(111)
 
 
 # Layout stuff #############
 
+multiline_size = (50,15)
+
+frame_layout_cube_meta = [
+    [sg.Multiline(size=multiline_size, key=guiek_cube_meta_text),]]
+frame_layout_ouput = [
+    [sg.Multiline(size=multiline_size, reroute_stdout=True, k=guiek_console_output, autoscroll=True,horizontal_scroll=True),]]
+
 cube_meta_column = [
-    [
-        sg.Text("Cube metadata"),
-    ],
-    [
-        sg.Multiline(size=(50, 15), key=guiek_cube_meta_text),
-    ],
-]
+    [sg.Frame("Cube metadata", frame_layout_cube_meta, expand_x=True, expand_y=True)],
+    [sg.Frame("Output", frame_layout_ouput, expand_x=True, expand_y=True)]]
+
+
+#cube_meta_column = [
+    #[sg.Push(),sg.Text("Cube metadata"),sg.Push()],
+    #[sg.Multiline(size=multiline_size, key=guiek_cube_meta_text),],
+    #[sg.Push(),sg.Text("Output"),sg.Push()],
+    #[sg.Multiline(size=multiline_size, reroute_stdout=True, k=guiek_console_output, autoscroll=True,horizontal_scroll=True),],
+#]
 
 
 cube_column = [
@@ -200,15 +235,16 @@ pixel_plot_column = [
 
 layout = [
     [
-        sg.Column(cube_meta_column),
+        sg.Column(cube_meta_column, expand_x=True, expand_y=True),
         sg.VSeperator(),
-        sg.Column(cube_column),
+        sg.Column(cube_column, expand_x=True, expand_y=True),
         sg.VSeperator(),
-        sg.Column(pixel_plot_column),
+        sg.Column(pixel_plot_column,  pad=(0, 100), expand_x=True, expand_y=True),
     ],
     [sg.HSeparator()],
+    [sg.VPush()],
     [
-        sg.Multiline(size=(120, 15), reroute_stdout=True, k=guiek_console_output, autoscroll=True, horizontal_scroll=True),
+        sg.Push(),
         sg.Button("Save", key=guiek_save_cube, enable_events=True, disabled=True,
                   tooltip="Saves the main cube as reflectance cube (with .dat extension). Only available \n"
                           "after dark and white corrections are calculated. Not available for precomputed \n "
@@ -216,8 +252,26 @@ layout = [
     ],
 ]
 
-window = sg.Window("Cube Inspector", layout=layout, margins=(100,100), finalize=True)
+window = sg.Window("Cube Inspector", layout=layout, margins=(100,100), finalize=True, resizable=True)
 window[guiek_console_output].Widget.configure(wrap='none')
+
+#resize canvases, cube metadata and output
+"""
+We don't need the for loops here as they are single elements. 
+Should figure out a way to resize without losing the buttons. And 
+maybe set a minimum size for the window. Good work! We continue from 
+here. - Kimmo 
+"""
+# for i in [guiek_cube_false_color]:
+window[guiek_cube_false_color].expand(expand_x=True, expand_y=True)
+# for i in [guiek_pixel_plot_canvas]:
+window[guiek_pixel_plot_canvas].expand(expand_x=True, expand_y=True)
+# for i in [guiek_cube_meta_text]:
+window[guiek_cube_meta_text].expand(expand_x=True, expand_y=True)
+# for i in [guiek_console_output]:
+window[guiek_console_output].expand(expand_x=True, expand_y=True)
+
+window.Maximize()
 
 
 def draw_figure(canvas, figure):
