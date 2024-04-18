@@ -138,13 +138,16 @@ ax_false_color = fig_false_color.add_subplot(111)
 multiline_size = (50,15)
 
 frame_layout_cube_meta = [
-    [sg.Multiline(size=multiline_size, key=guiek_cube_meta_text),]]
+    [sg.Multiline(size=multiline_size, key=guiek_cube_meta_text),]
+]
 frame_layout_ouput = [
-    [sg.Multiline(size=multiline_size, reroute_stdout=True, k=guiek_console_output, autoscroll=True,horizontal_scroll=True),]]
+    [sg.Multiline(size=multiline_size, reroute_stdout=True, k=guiek_console_output, autoscroll=True,horizontal_scroll=True),]
+]
 
 cube_meta_column = [
     [sg.Frame("Cube metadata", frame_layout_cube_meta, expand_x=True, expand_y=True)],
-    [sg.Frame("Output", frame_layout_ouput, expand_x=True, expand_y=True)]]
+    [sg.Frame("Output", frame_layout_ouput, expand_x=True, expand_y=True)]
+]
 
 
 #cube_meta_column = [
@@ -256,7 +259,8 @@ layout = [
     [sg.VPush()],
 ]
 
-window = sg.Window("Cube Inspector", layout=layout, margins=(100,100), finalize=True, resizable=True)
+window = sg.Window("Cube Inspector", layout=layout, margins=(50,50), finalize=True, resizable=True)
+window.set_min_size((500,300))
 window[guiek_console_output].Widget.configure(wrap='none')
 
 #resize canvases, cube metadata and output
@@ -275,7 +279,7 @@ window[guiek_cube_meta_text].expand(expand_x=True, expand_y=True)
 # for i in [guiek_console_output]:
 window[guiek_console_output].expand(expand_x=True, expand_y=True)
 
-# This causes some flickering when clicking on the RGB image. Should consider some fixed size, non-maximized window.
+# There if some flickering when clicking on the RGB image.
 # Also, I think the pixel plot size should not change with window size as it will be saved as-is.
 window.Maximize()
 
