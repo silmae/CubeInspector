@@ -114,6 +114,7 @@ guiek_console_output = "-CONSOLE-"
 
 # Save cube button
 guiek_save_cube = "-SAVE CUBE-"
+guiek_save_figures = "-SAVE FIGURES-"
 
 # Pixel plot component handles
 guiek_clear_button = "-CLEAR-"
@@ -242,14 +243,17 @@ layout = [
         sg.Column(pixel_plot_column,  pad=(0, 100), expand_x=True, expand_y=True),
     ],
     [sg.HSeparator()],
-    [sg.VPush()],
     [
         sg.Push(),
-        sg.Button("Save", key=guiek_save_cube, enable_events=True, disabled=True,
+        sg.Button("Save Cube", key=guiek_save_cube, enable_events=True, disabled=True,
                   tooltip="Saves the main cube as reflectance cube (with .dat extension). Only available \n"
                           "after dark and white corrections are calculated. Not available for precomputed \n "
-                          "reflectance cubes.")
+                          "reflectance cubes."),
+
+        sg.Button("Save Figures", key=guiek_save_figures, enable_events=True, disabled=True,
+                  tooltip="Saves figures."),
     ],
+    [sg.VPush()],
 ]
 
 window = sg.Window("Cube Inspector", layout=layout, margins=(100,100), finalize=True, resizable=True)
@@ -271,6 +275,8 @@ window[guiek_cube_meta_text].expand(expand_x=True, expand_y=True)
 # for i in [guiek_console_output]:
 window[guiek_console_output].expand(expand_x=True, expand_y=True)
 
+# This causes some flickering when clicking on the RGB image. Should consider some fixed size, non-maximized window.
+# Also, I think the pixel plot size should not change with window size as it will be saved as-is.
 window.Maximize()
 
 
@@ -291,6 +297,7 @@ _RUNTIME = {
     'fig_agg_false_color': draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color),
     'pltFig': False,
 
+    'cube_dir_path': None,
     'cube_is_reflectance': False, # If loaded cube is already reflectance we can disable all calculation stuff
     'cube_data': None,
     'img_array': None,
@@ -545,9 +552,14 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
     ax_px_plot.set_xlim(_RUNTIME['spectral_clip_min'], _RUNTIME['spectral_clip_max'])
     update_spectral_clip_wl_text()
 
+    plot_color = None
+
     # Plot the plot and save it. Update
     if spectrum is not None:
-        ax_px_plot.plot(spectrum)
+        # Store the random color used in pixel plot to draw a rectangle over RGB image later.
+        p = ax_px_plot.plot(spectrum)
+        plot_color = p[-1].get_color()
+
         _RUNTIME['plots'].append(spectrum)
         new_plot_max = 0
         for plot in _RUNTIME['plots']:
@@ -592,7 +604,10 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
         width = math.fabs(x0 - x1)
         height = math.fabs(y0 - y1)
         _RUNTIME['fig_agg_false_color'].get_tk_widget().forget()
-        handle = ax_false_color.add_patch(Rectangle((x0, y0), width=width, height=height, fill=False, edgecolor='gray'))
+        if plot_color is not None:
+            handle = ax_false_color.add_patch(Rectangle((x0, y0), width=width, height=height, fill=False, edgecolor=plot_color))
+        else:
+            handle = ax_false_color.add_patch(Rectangle((x0, y0), width=width, height=height, fill=False, edgecolor='gray'))
         _RUNTIME['rectangle_handles'].append(handle)
         _RUNTIME['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
 
@@ -797,6 +812,8 @@ def find_cube(path: str, mode: str):
         if fn_wo_postfix == base_name and (file_name.lower().endswith(".dat") or file_name.lower().endswith(".img")):
             reflectance_found = True
             cube_file_name = file_name
+            # We managed to find a proper file, so might as well set the path to memory for saving plots
+            _RUNTIME['cube_dir_path'] = selected_dir_path
 
     if hdr_found and (raw_found or reflectance_found):
         print(f"Envi cube files OK. ")
@@ -997,6 +1014,7 @@ def update_UI_component_state():
     window[guiek_calc_white].update(disabled=True)
 
     window[guiek_save_cube].update(disabled=True)
+    window[guiek_save_figures].update(disabled=True)
 
     if _RUNTIME['img_array'] is not None:
         window[guiek_cube_show_button].update(disabled=False)
@@ -1025,6 +1043,9 @@ def update_UI_component_state():
 
         if _RUNTIME['white_corrected'] or _RUNTIME['dark_corrected']:
             window[guiek_save_cube].update(disabled=False)
+
+    if _RUNTIME['cube_dir_path'] is not None:
+        window[guiek_save_figures].update(disabled=False)
 
     # Update the RGB inboxes as well
     window[guiek_r_input].update(str(_RUNTIME['band_R']))
@@ -1128,6 +1149,22 @@ def save_reflectance_cube():
     print(f"Cube saved.")
 
 
+def save_figures():
+    """Saves false color RGB image and pixel plot to disk to same path where the cubes are in."""
+
+    path_save_rgb = _RUNTIME['cube_dir_path'] + '/' + 'false_rgb.png'
+    path_save_px_plot = _RUNTIME['cube_dir_path'] + '/' + 'pixel_plot.png'
+
+    # Pyplot reference figures by index number so this way we can save them separately.
+    plt.figure(1)
+    plt.savefig(path_save_px_plot, dpi=600, bbox_inches='tight', transparent=False)
+    print(f"Saved false color RGB image to '{path_save_rgb}'.")
+
+    plt.figure(2)
+    plt.savefig(path_save_rgb, dpi=600, bbox_inches='tight', transparent=False)
+    print(f"Saved pixel plot to '{path_save_px_plot}'.")
+
+
 def main():
     answer = sg.popup_yes_no("Wanna load previous session?\n\n"
                              "Be patient if you select yes: it will take some time before the UI updates.")
@@ -1205,6 +1242,9 @@ def main():
 
         elif event == guiek_save_cube:
             save_reflectance_cube()
+
+        elif event == guiek_save_figures:
+            save_figures()
 
         elif event == guiek_rgb_update_button:
             try:
