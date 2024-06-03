@@ -54,6 +54,19 @@ import toml_handling as TH
 # TODO Show corresponding wl for RGB band selection. In plot or as a text box?
 # TODO Gaussian or mean RGB.
 
+
+#### Plotting constants ####
+
+axis_label_font_size = 16
+"""Axis label font size"""
+tick_label_font_size = 14
+"""Tick label font size"""
+save_resolution = 300
+"""Save resolution for plots in dots per inch."""
+
+#############################
+
+
 # Set Matplotlib to use TKinter backend apparently?
 matplotlib.use("TkAgg")
 
@@ -127,10 +140,16 @@ guiek_spectral_clip_button = "-SPECTRAL CLIP-"
 # Pixel plot
 fig_px_plot = plt.figure(figsize=(5, 4), dpi=100)
 ax_px_plot = fig_px_plot.add_subplot(111)
+ax_px_plot.xaxis.set_tick_params(labelsize=tick_label_font_size)
+ax_px_plot.yaxis.set_tick_params(labelsize=tick_label_font_size)
+
 
 # False color imshow
 fig_false_color = plt.figure(figsize=(6, 6), dpi=100)
 ax_false_color = fig_false_color.add_subplot(111)
+
+ax_false_color.xaxis.set_tick_params(labelsize=tick_label_font_size)
+ax_false_color.yaxis.set_tick_params(labelsize=tick_label_font_size)
 
 
 # Layout stuff #############
@@ -585,7 +604,7 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
         # for i,wl in enumerate(wls):
         #     print(f"{wl:.4} {spectrum[i]/s_max:.9}")
 
-        ax_px_plot.set_xlabel('Band')
+        ax_px_plot.set_xlabel('Band', fontsize=axis_label_font_size)
 
         def forward(x):
             return np.interp(x, bands, wls)
@@ -595,7 +614,8 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
 
         # FIXME the wavelength axis is not perfect as two figures are shown at the extremes
         secax = ax_px_plot.secondary_xaxis('top', functions=(forward, inverse))
-        secax.set_xlabel(r"Wavelength [$nm$]")
+        secax.xaxis.set_tick_params(labelsize=tick_label_font_size)
+        secax.set_xlabel(r"Wavelength [$nm$]", fontsize=axis_label_font_size)
         _RUNTIME['sec_axes_px_plot'] = secax
 
     if std is not None:
@@ -739,8 +759,8 @@ def update_false_color_canvas():
     # it will break pixel indexing for mouse selection
     ax_false_color.cla()
     ax_false_color.imshow(false_color_rgb)
-    ax_false_color.set_xlabel('Samples')
-    ax_false_color.set_ylabel('Lines')
+    ax_false_color.set_xlabel('Samples', fontsize=axis_label_font_size)
+    ax_false_color.set_ylabel('Lines', fontsize=axis_label_font_size)
     _RUNTIME['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
 
 
@@ -1161,11 +1181,11 @@ def save_figures():
 
     # Pyplot reference figures by index number so this way we can save them separately.
     plt.figure(1)
-    plt.savefig(path_save_px_plot, dpi=600, bbox_inches='tight', transparent=False)
+    plt.savefig(path_save_px_plot, dpi=save_resolution, bbox_inches='tight', transparent=False)
     print(f"Saved false color RGB image to '{path_save_rgb}'.")
 
     plt.figure(2)
-    plt.savefig(path_save_rgb, dpi=600, bbox_inches='tight', transparent=False)
+    plt.savefig(path_save_rgb, dpi=save_resolution, bbox_inches='tight', transparent=False)
     print(f"Saved pixel plot to '{path_save_px_plot}'.")
 
 
