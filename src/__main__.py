@@ -136,6 +136,8 @@ guiek_spectral_max_input = "-SPECTRAL MAX INPUT-"
 guiek_spectal_clip_min_wl_text = "-SPECTRAL CLIP MIN TEXT WL-"
 guiek_spectal_clip_max_wl_text = "-SPECTRAL CLIP MAX TEXT WL-"
 guiek_spectral_clip_button = "-SPECTRAL CLIP-"
+guiek_ylim_input = "-YLIM INPUT-"
+guiek_ylim_apply_button = "-YLIM APPLY-"
 
 # Pixel plot
 fig_px_plot = plt.figure(figsize=(5, 4), dpi=100)
@@ -252,7 +254,10 @@ pixel_plot_column = [
         sg.Text("Max: "),
         sg.In(size=(5,1), key=guiek_spectral_max_input, tooltip="Spectral range high clip."),
         sg.Text("---.-- nm", key=guiek_spectal_clip_max_wl_text),
-        sg.Button("Clip", key=guiek_spectral_clip_button, enable_events=True)
+        sg.Button("Clip", key=guiek_spectral_clip_button, enable_events=True),
+        sg.Push(),
+        sg.In(size=(5,1), key=guiek_ylim_input, tooltip="Y axis limit."),
+        sg.Button("Ylim", key=guiek_ylim_apply_button, enable_events=True)
     ]
 ]
 
@@ -354,6 +359,9 @@ _RUNTIME = {
 
     'spectral_clip_min': 0,
     'spectral_clip_max': 0,
+
+    'px_plot_ylim': None, # float or None. None is interperted so that automatic scaling is used
+    'px_plot_ylim_auto': None, # used if user overrides ylim at some point but want to go back to previous automatic lim
 
     'plots': [],
 }
@@ -576,6 +584,7 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
     update_spectral_clip_wl_text()
 
     plot_color = None
+    ylim = _RUNTIME['px_plot_ylim']
 
     # Plot the plot and save it. Update
     if spectrum is not None:
@@ -592,7 +601,24 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
 
         # print(f"Setting ylim to {_RUNTIME['plot_max']}")
         # Set ylim a little higher than the max value of any of the plots
-        ax_px_plot.set_ylim(0, new_plot_max * 1.05)
+        auto_ylim = new_plot_max * 1.05
+        if ylim is None:
+            _RUNTIME['px_plot_ylim_auto'] = auto_ylim
+            ax_px_plot.set_ylim(0, auto_ylim)
+        else:
+            try:
+                ax_px_plot.set_ylim(0, ylim)
+            except:
+                print("Could not set y-axis limit from user feed. Using automatic y-axis limit.")
+                _RUNTIME['px_plot_ylim_auto'] = auto_ylim
+                ax_px_plot.set_ylim(0, auto_ylim)
+
+    # Even if new spectrum was not given, we can try to update ylim
+    else:
+        if ylim is not None:
+            ax_px_plot.set_ylim(0, ylim)
+        else:
+            ax_px_plot.set_ylim(0, _RUNTIME['px_plot_ylim_auto'])
 
     bands = _RUNTIME['cube_bands']
     wls = _RUNTIME['cube_wls']
@@ -1221,6 +1247,20 @@ def main():
                 update_px_plot()
             except Exception as e:
                 print(f"Could not set clip value: \n {e}")
+
+        elif event == guiek_ylim_apply_button:
+            feed = values[guiek_ylim_input]
+            if len(feed) == 0:
+                print("empty ylim input. setting it to none")
+                _RUNTIME['px_plot_ylim'] = None
+                update_px_plot()
+            else:
+                try:
+                    feed_int = float(feed)
+                    _RUNTIME['px_plot_ylim'] = feed_int
+                    update_px_plot()
+                except:
+                    print(f"Could not cast y-axis limit input '{feed}' into a float. Ignoring input.")
 
         elif event == guiek_cube_file_browse:
             window[guiek_cube_show_filename].update(value=get_base_name_wo_postfix(values[guiek_cube_file_browse]))
