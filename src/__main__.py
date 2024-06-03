@@ -287,6 +287,21 @@ window = sg.Window("Cube Inspector", layout=layout, margins=(50,50), finalize=Tr
 window.set_min_size((500,300))
 window[guiek_console_output].Widget.configure(wrap='none')
 
+# Bind Enter key(s) to input fields that can use it
+
+window[guiek_r_input].bind("<Return>", "_Enter")
+window[guiek_r_input].bind("<Return>", "KP_Enter")
+window[guiek_g_input].bind("<Return>", "_Enter")
+window[guiek_g_input].bind("<Return>", "KP_Enter")
+window[guiek_b_input].bind("<Return>", "_Enter")
+window[guiek_b_input].bind("<Return>", "KP_Enter")
+window[guiek_spectral_min_input].bind("<Return>", "_Enter")
+window[guiek_spectral_min_input].bind("<Return>", "KP_Enter")
+window[guiek_spectral_max_input].bind("<Return>", "_Enter")
+window[guiek_spectral_max_input].bind("<Return>", "KP_Enter")
+window[guiek_ylim_input].bind("<Return>", "_Enter")
+window[guiek_ylim_input].bind("<Return>", "KP_Enter")
+
 #resize canvases, cube metadata and output
 """
 We don't need the for loops here as they are single elements. 
@@ -1241,14 +1256,17 @@ def main():
         elif event == guiek_clear_button:
             clear_plot()
 
-        elif event == guiek_spectral_clip_button:
+        elif (event == guiek_spectral_clip_button or
+              event == guiek_spectral_min_input + "_Enter" or event == guiek_spectral_min_input + "KP_Enter" or
+              event == guiek_spectral_max_input + "_Enter" or event == guiek_spectral_max_input + "KP_Enter"):
+            print("or enter")
             try:
                 infer_runtime_spectral_clip(values[guiek_spectral_min_input], values[guiek_spectral_max_input])
                 update_px_plot()
             except Exception as e:
                 print(f"Could not set clip value: \n {e}")
 
-        elif event == guiek_ylim_apply_button:
+        elif event == guiek_ylim_apply_button or event == guiek_ylim_input + "_Enter" or event == guiek_ylim_input + "KP_Enter":
             feed = values[guiek_ylim_input]
             if len(feed) == 0:
                 print("empty ylim input. setting it to none")
@@ -1310,7 +1328,10 @@ def main():
         elif event == guiek_save_figures:
             save_figures()
 
-        elif event == guiek_rgb_update_button:
+        elif (event == guiek_rgb_update_button or
+              event == guiek_r_input + "_Enter" or event == guiek_r_input + "KP_Enter" or
+              event == guiek_g_input + "_Enter" or event == guiek_g_input + "KP_Enter" or
+              event == guiek_b_input + "_Enter" or event == guiek_b_input + "KP_Enter"):
             try:
                 # Just try casting before continuing
                 _, _ = infer_runtime_RGB_value(values[guiek_r_input])
