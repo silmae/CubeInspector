@@ -256,7 +256,7 @@ pixel_plot_column = [
         sg.Text("---.-- nm", key=guiek_spectal_clip_max_wl_text),
         sg.Button("Clip", key=guiek_spectral_clip_button, enable_events=True),
         sg.Push(),
-        sg.In(size=(5,1), key=guiek_ylim_input, tooltip="Y axis limit."),
+        sg.In(size=(7,1), key=guiek_ylim_input, tooltip="Y axis limit."),
         sg.Button("Ylim", key=guiek_ylim_apply_button, enable_events=True)
     ]
 ]
@@ -996,6 +996,8 @@ def calc_white():
     if white_spectrum is None:
         print(f"Cannot calculate white because white spectrum is None. Select a region from the white cube first.")
         return
+
+    white_spectrum = white_spectrum - _RUNTIME['dark_median']
 
     _RUNTIME['img_array'] = np.divide(_RUNTIME['img_array'], white_spectrum, dtype=np.float32)
     _RUNTIME['white_corrected'] = True
