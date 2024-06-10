@@ -8,7 +8,7 @@ import math
 TODO kirjota kokonaan uudestaan. Tää on jotenki ihan päin helvettiä.
 """
 
-mes_y_adj = 20
+mes_y_adj = 10
 
 val_measurement = {
     'hdr_path': "D:/Koodi/Python/HyperBlend/Algae spectral images/11_04_2024/Algae/021/capture/021_CI_darkcorrected.hdr",
@@ -18,7 +18,7 @@ val_measurement = {
     'x1': 180,
     'y1': 360+mes_y_adj,
     'band_b': 18,
-    'band_r': 90,
+    'band_r': 83,
 }
 # Mouse drag from (497,170) to (542,632).
 
@@ -34,7 +34,7 @@ val_simulated = {
     'x1': 180,
     'y1': 360+sim_y_adj,
     'band_b': 5,
-    'band_r': 26,
+    'band_r': 24,
 }
 
 
