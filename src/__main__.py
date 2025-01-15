@@ -36,364 +36,30 @@ Github project PySimpleGUI: https://github.com/PySimpleGUI/PySimpleGUI
 Refreshing plot: https://gist.github.com/KenoLeon/e913de9e1fe690ebe287e6d1e54e3b97
 """
 
-import os
 import math
-import logging
 
-import PySimpleGUI as sg
-import spectral.io.envi as envi
 import spectral as spy
 import numpy as np
-import matplotlib
-import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import toml_handling as TH
+
+from src.cube_handling import find_cube, calc_dark, calc_white, cube_meta, open_cube
+from src.ui import *
+from src.state import state_load, state_save, get_runtime_state, update_runtime_ui_components, get_save_state
+from src.utils import get_base_name_wo_postfix, img_array_to_rgb, infer_runtime_RGB_value
 
 # TODO Incorporate dark and white selection logic with buttons.
 # TODO Show corresponding wl for RGB band selection. In plot or as a text box?
 # TODO Gaussian or mean RGB.
 
 
-#### Plotting constants ####
-
-axis_label_font_size = 16
-"""Axis label font size"""
-tick_label_font_size = 14
-"""Tick label font size"""
-save_resolution = 300
-"""Save resolution for plots in dots per inch."""
-
-#############################
-
-
-# Set Matplotlib to use TKinter backend apparently?
-matplotlib.use("TkAgg")
-
 # Set Spectral Python library to support non-lowercase file names
 spy.settings.envi_support_nonlowercase_params = True
 
-# Set a nice color theme
-sg.theme('dark grey 9')
+window, fig_px_plot, fig_false_color, ax_px_plot, ax_false_color = initialize_ui()
+update_runtime_ui_components(window, fig_px_plot, fig_false_color, guiek_pixel_plot_canvas, guiek_cube_false_color)
 
-# State dict save directory and filename
-state_dir_path = os.getcwd()
-state_file_name = "ci_state"
-
-
-# GUI entity keys ###################
-
-# Browse file buttons
-guiek_cube_file_browse = "-CUBE BROWSE-"
-guiek_dark_file_browse = "-DARK BROWSE-"
-guiek_white_file_browse = "-WHITE BROWSE-"
-
-# Show selected filename
-guiek_cube_show_filename = "-CUBE SHOW FILENAME-"
-guiek_dark_show_filename = "-DARK SHOW FILENAME-"
-guiek_white_show_filename = "-WHITE SHOW FILENAME-"
-
-# For show buttons
-guiek_cube_show_button = "-CUBE SHOW BUTTON-"
-guiek_dark_show_button = "-DARK SHOW BUTTON-"
-guiek_white_show_button = "-WHITE SHOW BUTTON-"
-
-# White reference selection buttons
-guiek_white_select_region = "-WHITE SELECT REGION-"
-guiek_white_select_whole = "-WHITE SELECT WHOLE-"
-
-# RGB selection
-guiek_r_input = "-R-"
-guiek_g_input = "-G-"
-guiek_b_input = "-B-"
-guiek_r_wl_text = "-R WAVELENGTH-"
-guiek_g_wl_text = "-G WAVELENGTH-"
-guiek_b_wl_text = "-B WAVELENGTH-"
-guiek_rgb_update_button = "-RGB UPDATE BUTTON-"
-
-# Correction calculation buttons
-guiek_calc_dark = "-CALCULATE DARK-"
-guiek_calc_white = "-CALCULATE WHITE-"
-
-# Canvases
-guiek_cube_false_color = "-FALSE COLOR-"
-guiek_pixel_plot_canvas = "-PX PLOT CANVAS-"
-
-# Cube metadata
-guiek_cube_meta_text = "-CUBE META-"
-
-# UI console
-guiek_console_output = "-CONSOLE-"
-
-# Save cube button
-guiek_save_cube = "-SAVE CUBE-"
-guiek_save_figures = "-SAVE FIGURES-"
-
-# Pixel plot component handles
-guiek_clear_button = "-CLEAR-"
-guiek_spectral_min_input = "-SPECTRAL MIN INPUT-"
-guiek_spectral_max_input = "-SPECTRAL MAX INPUT-"
-guiek_spectal_clip_min_wl_text = "-SPECTRAL CLIP MIN TEXT WL-"
-guiek_spectal_clip_max_wl_text = "-SPECTRAL CLIP MAX TEXT WL-"
-guiek_spectral_clip_button = "-SPECTRAL CLIP-"
-guiek_ylim_input = "-YLIM INPUT-"
-guiek_ylim_apply_button = "-YLIM APPLY-"
-
-# Pixel plot
-fig_px_plot = plt.figure(figsize=(5, 4), dpi=100)
-ax_px_plot = fig_px_plot.add_subplot(111)
-ax_px_plot.xaxis.set_tick_params(labelsize=tick_label_font_size)
-ax_px_plot.yaxis.set_tick_params(labelsize=tick_label_font_size)
-
-
-# False color imshow
-fig_false_color = plt.figure(figsize=(6, 6), dpi=100)
-ax_false_color = fig_false_color.add_subplot(111)
-
-ax_false_color.xaxis.set_tick_params(labelsize=tick_label_font_size)
-ax_false_color.yaxis.set_tick_params(labelsize=tick_label_font_size)
-
-
-# Layout stuff #############
-
-multiline_size = (50,15)
-
-frame_layout_cube_meta = [
-    [sg.Multiline(size=multiline_size, key=guiek_cube_meta_text),]
-]
-frame_layout_ouput = [
-    [sg.Multiline(size=multiline_size, reroute_stdout=True, k=guiek_console_output, autoscroll=True,horizontal_scroll=True),]
-]
-
-cube_meta_column = [
-    [sg.Frame("Cube metadata", frame_layout_cube_meta, expand_x=True, expand_y=True)],
-    [sg.Frame("Output", frame_layout_ouput, expand_x=True, expand_y=True)]
-]
-
-
-#cube_meta_column = [
-    #[sg.Push(),sg.Text("Cube metadata"),sg.Push()],
-    #[sg.Multiline(size=multiline_size, key=guiek_cube_meta_text),],
-    #[sg.Push(),sg.Text("Output"),sg.Push()],
-    #[sg.Multiline(size=multiline_size, reroute_stdout=True, k=guiek_console_output, autoscroll=True,horizontal_scroll=True),],
-#]
-
-
-cube_column = [
-    [
-        sg.Text("Cube"),
-        sg.In(size=(25, 1), enable_events=True, key=guiek_cube_show_filename, disabled=True, text_color='black'), # always disabled
-        sg.FileBrowse(key=guiek_cube_file_browse, target=guiek_cube_file_browse, enable_events=True,
-                      tooltip="Select a hyperspectral ENVI format hypercube to show. It suffices to pick either a header or \n"
-                              "data file, the directory is searched for associated files automatically. The data can \n"
-                              "be as raw data (radiance, digital number, etc.) or precomputed reflectance cube with \n"
-                              "dark and white corrections."), # always enabled
-        sg.Button('Show', enable_events=True, key=guiek_cube_show_button, disabled=True,
-                  tooltip="Shows selected cube. This is used to swap back and forth with dark, white and main cubes if applicable, i.e., \n"
-                          "when not dealing with precomputed reflectance cubes."),
-    ],
-    [
-        sg.Text("Dark"),
-        sg.In(size=(25, 1), enable_events=True, key=guiek_dark_show_filename, disabled=True, text_color='black'),# always disabled
-        sg.FileBrowse(key=guiek_dark_file_browse, target=guiek_dark_file_browse, enable_events=True, disabled=True,
-                      tooltip="Select a dark cube to be used for dark current correction. Median of the cube is calculated \n"
-                              "automatically after selection, so give it some time."),
-        sg.Button('Show', enable_events=True, key=guiek_dark_show_button, disabled=True,
-                  tooltip="Shows selected DARK cube. This is used to swap back and forth with dark, white and main cubes if applicable, i.e., \n"
-                          "when not dealing with precomputed reflectance cubes."
-                  ),
-        sg.Button("Calculate", k=guiek_calc_dark, disabled=True,
-                  tooltip="Subtracts dark current from the main cube. \n Dark current is the median of the whole dark cube over scan lines."),
-    ],
-    [
-        sg.Text("White"),
-        sg.In(size=(25, 1), enable_events=True, key=guiek_white_show_filename, disabled=True, text_color='black', background_color='grey'),# always disabled
-        sg.FileBrowse(key=guiek_white_file_browse, target=guiek_white_file_browse, enable_events=True, disabled=True,
-                      tooltip="Select white reference cube for white correction. If your white reference is in your main data cube, \n"
-                              "you can select it again and use the 'Select region' button to select the pixels you want to use.\n"),
-        sg.Button('Show', enable_events=True, key=guiek_white_show_button, disabled=True,
-                  tooltip="Shows selected WHITE cube. This is used to swap back and forth with dark, white and main cubes if applicable, i.e., \n"
-                          "when not dealing with precomputed reflectance cubes."
-                  ),
-        sg.Button("Select region", k=guiek_white_select_region, disabled=True,
-                  tooltip="Select a region of the white cube to be used as a white reference."),
-        sg.Button("Select whole", k=guiek_white_select_whole, disabled=True,
-                  tooltip="Select the whole white cube to be used as a white reference."),
-        sg.Button("Calculate", k=guiek_calc_white, disabled=True,
-                  tooltip="Calculate white correction. The each pixel (spectrum) will be divided by the white reference spectrum, \n"
-                          "which is the band-wise mean of all the selected white reference area."),
-    ],
-    [
-        sg.Canvas(key=guiek_cube_false_color),
-    ],
-    [
-        sg.Text("R"),
-        sg.In(size=(5, 1), key=guiek_r_input,
-              tooltip="Band used for the red channel in the false color representation of the cube."),
-        sg.Text("---.-- nm", key=guiek_r_wl_text),
-        sg.Text("G"),
-        sg.In(size=(5, 1), key=guiek_g_input,
-              tooltip="Band used for the green channel in the false color representation of the cube."),
-        sg.Text("---.-- nm", key=guiek_g_wl_text),
-        sg.Text("B"),
-        sg.In(size=(5, 1), key=guiek_b_input,
-              tooltip="Band used for the blue channel in the false color representation of the cube."),
-        sg.Text("---.-- nm", key=guiek_b_wl_text),
-        sg.Button('Update', enable_events=True, key=guiek_rgb_update_button,
-                  tooltip="Update false color image and pixel plot to represent the selected bands.")
-    ],
-]
-
-pixel_plot_column = [
-    [sg.Canvas(key=guiek_pixel_plot_canvas)],
-    [
-        sg.Button("Clear", key=guiek_clear_button),
-        sg.Text("Min: "),
-        sg.In(size=(5,1), key=guiek_spectral_min_input, tooltip="Spectral range low clip."),
-        sg.Text("---.-- nm", key=guiek_spectal_clip_min_wl_text),
-        sg.Text("Max: "),
-        sg.In(size=(5,1), key=guiek_spectral_max_input, tooltip="Spectral range high clip."),
-        sg.Text("---.-- nm", key=guiek_spectal_clip_max_wl_text),
-        sg.Button("Clip", key=guiek_spectral_clip_button, enable_events=True),
-        sg.Push(),
-        sg.In(size=(7,1), key=guiek_ylim_input, tooltip="Y axis limit."),
-        sg.Button("Ylim", key=guiek_ylim_apply_button, enable_events=True)
-    ]
-]
-
-layout = [
-    [
-        sg.Column(cube_meta_column, expand_x=True, expand_y=True),
-        sg.VSeperator(),
-        sg.Column(cube_column, expand_x=True, expand_y=True),
-        sg.VSeperator(),
-        sg.Column(pixel_plot_column,  pad=(0, 100), expand_x=True, expand_y=True),
-    ],
-    [sg.HSeparator()],
-    [
-        sg.Push(),
-        sg.Button("Save Cube", key=guiek_save_cube, enable_events=True, disabled=True,
-                  tooltip="Saves the main cube as reflectance cube (with .dat extension). Only available \n"
-                          "after dark and white corrections are calculated. Not available for precomputed \n "
-                          "reflectance cubes."),
-
-        sg.Button("Save Figures", key=guiek_save_figures, enable_events=True, disabled=True,
-                  tooltip="Saves figures."),
-    ],
-    [sg.VPush()],
-]
-
-window = sg.Window("Cube Inspector", layout=layout, margins=(50,50), finalize=True, resizable=True)
-window.set_min_size((500,300))
-window[guiek_console_output].Widget.configure(wrap='none')
-
-# Bind Enter key(s) to input fields that can use it
-
-window[guiek_r_input].bind("<Return>", "_Enter")
-window[guiek_r_input].bind("<Return>", "KP_Enter")
-window[guiek_g_input].bind("<Return>", "_Enter")
-window[guiek_g_input].bind("<Return>", "KP_Enter")
-window[guiek_b_input].bind("<Return>", "_Enter")
-window[guiek_b_input].bind("<Return>", "KP_Enter")
-window[guiek_spectral_min_input].bind("<Return>", "_Enter")
-window[guiek_spectral_min_input].bind("<Return>", "KP_Enter")
-window[guiek_spectral_max_input].bind("<Return>", "_Enter")
-window[guiek_spectral_max_input].bind("<Return>", "KP_Enter")
-window[guiek_ylim_input].bind("<Return>", "_Enter")
-window[guiek_ylim_input].bind("<Return>", "KP_Enter")
-
-#resize canvases, cube metadata and output
-"""
-We don't need the for loops here as they are single elements. 
-Should figure out a way to resize without losing the buttons. And 
-maybe set a minimum size for the window. Good work! We continue from 
-here. - Kimmo 
-"""
-# for i in [guiek_cube_false_color]:
-window[guiek_cube_false_color].expand(expand_x=True, expand_y=True)
-# for i in [guiek_pixel_plot_canvas]:
-window[guiek_pixel_plot_canvas].expand(expand_x=True, expand_y=True)
-# for i in [guiek_cube_meta_text]:
-window[guiek_cube_meta_text].expand(expand_x=True, expand_y=True)
-# for i in [guiek_console_output]:
-window[guiek_console_output].expand(expand_x=True, expand_y=True)
-
-# There if some flickering when clicking on the RGB image.
-# Also, I think the pixel plot size should not change with window size as it will be saved as-is.
-window.Maximize()
-
-
-def draw_figure(canvas, figure):
-    """Helper function to draw things on canvas."""
-
-    figure_canvas_agg = FigureCanvasTkAgg(figure, canvas)
-    figure_canvas_agg.draw()
-    figure_canvas_agg.get_tk_widget().pack(side="top", fill="both", expand=1)
-    return figure_canvas_agg
-
-
-# Keep most of the global stuff in this single dictionary for later access
-_RUNTIME = {
-    'window': window,
-    'fig_agg_px_plot': draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot),
-    'sec_axes_px_plot': None,
-    'fig_agg_false_color': draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color),
-    'pltFig': False,
-
-    'cube_dir_path': None,
-    'cube_is_reflectance': False, # If loaded cube is already reflectance we can disable all calculation stuff
-    'cube_data': None,
-    'img_array': None,
-    'img_array_dark': None,
-    'img_array_white': None,
-    'white_corrected': False,
-    'dark_corrected': False,
-    'cube_wls': None,
-    'cube_bands': None,
-    'rect_x_0': None,
-    'rect_y_0': None,
-    'rect_x_1': None,
-    'rect_y_1': None,
-
-    'rectangle_handles': [],
-    'dot_handles': [],
-    'rgb_handles': [],
-
-    'selecting_white': False,
-
-    'view_mode': None, # 'cube', 'dark', 'white' or None
-
-    'white_spectra': None,
-    'dark_median': None,
-
-    'mouse_handlers_connected': False,
-
-    'band_B': '', # string
-    'band_G': '', # string
-    'band_R': '', # string
-
-    'spectral_clip_min': 0,
-    'spectral_clip_max': 0,
-
-    'px_plot_ylim': None, # float or None. None is interperted so that automatic scaling is used
-    'px_plot_ylim_auto': None, # used if user overrides ylim at some point but want to go back to previous automatic lim
-
-    'plots': [],
-}
-
-
-_STATE = {
-    'main_cube_hdr_path': None,
-    'dark_cube_hdr_path': None,
-    'white_cube_hdr_path': None,
-    'main_cube_data_path': None,
-    'dark_cube_data_path': None,
-    'white_cube_data_path': None,
-
-    'band_B': 0,
-    'band_G': 0,
-    'band_R': 0,
-}
+# Get the runtime state dictionary only once
+runtime_state = get_runtime_state()
 
 _SETTINGS = {
     'drag_threshold': 5
@@ -404,8 +70,8 @@ def mouse_click_event(eventi):
     """Handle mouse click event (button 1 down)."""
 
     # Store data in case there will be a drag
-    _RUNTIME['rect_x_0'] = eventi.xdata
-    _RUNTIME['rect_y_0'] = eventi.ydata
+    runtime_state['rect_x_0'] = eventi.xdata
+    runtime_state['rect_y_0'] = eventi.ydata
 
 
 def mouse_release_event(eventi):
@@ -419,8 +85,8 @@ def mouse_release_event(eventi):
 
     # Left click for right-handed mouse.
     if eventi.button == 1:
-        x0 = _RUNTIME['rect_x_0']
-        y0 = _RUNTIME['rect_y_0']
+        x0 = runtime_state['rect_x_0']
+        y0 = runtime_state['rect_y_0']
         y = eventi.ydata
         x = eventi.xdata
 
@@ -440,14 +106,14 @@ def mouse_release_event(eventi):
             rows = list(np.arange(start=drag_start_x, stop=drag_end_x, step=1))
             cols = list(np.arange(start=drag_start_y, stop=drag_end_y, step=1))
 
-            if _RUNTIME['view_mode'] == 'cube':
-                sub_image = _RUNTIME['img_array'][cols][:, rows]
-            elif _RUNTIME['view_mode'] == 'dark':
-                sub_image = _RUNTIME['img_array_dark'][cols][:, rows]
-            elif _RUNTIME['view_mode'] == 'white':
-                sub_image = _RUNTIME['img_array_white'][cols][:, rows]
+            if runtime_state['view_mode'] == 'cube':
+                sub_image = runtime_state['img_array'][cols][:, rows]
+            elif runtime_state['view_mode'] == 'dark':
+                sub_image = runtime_state['img_array_dark'][cols][:, rows]
+            elif runtime_state['view_mode'] == 'white':
+                sub_image = runtime_state['img_array_white'][cols][:, rows]
             else:
-                print(f"WARNING: View mode '{_RUNTIME['view_mode']}' not supported.")
+                print(f"WARNING: View mode '{runtime_state['view_mode']}' not supported.")
 
             sub_mean = np.mean(sub_image, axis=(0,1))
             sub_std = np.std(sub_image, axis=(0,1))
@@ -455,21 +121,21 @@ def mouse_release_event(eventi):
             update_px_rgb_lines()
             update_px_plot(spectrum=sub_mean, std=sub_std, x0=drag_start_x, y0=drag_start_y, x1=drag_end_x, y1=drag_end_y)
 
-            if _RUNTIME['selecting_white']:
-                _RUNTIME['white_spectra'] = sub_mean
-                _RUNTIME['selecting_white'] = False
+            if runtime_state['selecting_white']:
+                runtime_state['white_spectra'] = sub_mean
+                runtime_state['selecting_white'] = False
                 print(f"White spectrum saved.")
 
         else:
             # Else it was just a click and we can reset x0 and y0
-            _RUNTIME['rect_x_0'] = None
-            _RUNTIME['rect_y_0'] = None
-            pixel = _RUNTIME['img_array'][int(y), int(x)]
+            runtime_state['rect_x_0'] = None
+            runtime_state['rect_y_0'] = None
+            pixel = runtime_state['img_array'][int(y), int(x)]
             print(f"Mouse click at ({int(x)},{int(y)}).")
             update_px_rgb_lines()
             update_px_plot(spectrum=pixel, x0=x, y0=y)
 
-        update_UI_component_state()
+        update_UI_component_state(RUNTIME=runtime_state)
 
 
 def infer_runtime_spectral_clip(min_value: str, max_value: str):
@@ -494,43 +160,14 @@ def infer_runtime_spectral_clip(min_value: str, max_value: str):
     if min_int > max_int:
         raise ValueError(f"Clipping min ({min_int}) greater than max ({max_int}).")
 
-    if _RUNTIME['cube_data'] is None:
+    if runtime_state['cube_data'] is None:
         raise RuntimeError(f"No cube selected: I will not set clipping for you.")
 
-    bands = _RUNTIME['cube_bands']
+    bands = runtime_state['cube_bands']
     actual_min = np.clip(min_int, bands[0], bands[-1])
     actual_max = np.clip(max_int, bands[0], bands[-1])
-    _RUNTIME['spectral_clip_min'] = actual_min
-    _RUNTIME['spectral_clip_max'] = actual_max
-
-
-def infer_runtime_RGB_value(value: str):
-    """Proces the string that user has given as band selection or fill value.
-
-    Value is interpreted as band selection if one can directly cast it into an
-    integer. Otherwise, if it starts with character 'f' and the rest can be
-    cast to integer, the return value is (True, int).
-
-    :returns:
-        (bool, int) where the bool indicates if the int should be inferred as a fill value.
-        If False, the int should be inferred as a band number.
-    """
-
-    should_fill = False
-    if value.startswith('f'):
-        to_int = value[1:]
-        should_fill = True
-    else:
-        to_int = value
-
-    try:
-        parsed_int = int(to_int)
-    except ValueError as e:
-        print(f"Could not parse fill value from string '{value}'. Input a raw int or for filling an RGB channel with "
-              f"a single value, provide string in format fXXX.., where XXX.. can be interpreted as an integer.")
-        raise
-
-    return should_fill, parsed_int
+    runtime_state['spectral_clip_min'] = actual_min
+    runtime_state['spectral_clip_max'] = actual_max
 
 
 def update_px_rgb_lines():
@@ -542,17 +179,17 @@ def update_px_rgb_lines():
     You should call update_px_plot() after calling this for the actual update on screen.
     """
 
-    for handle in _RUNTIME['rgb_handles']:
+    for handle in runtime_state['rgb_handles']:
         handle.remove()
 
-    _RUNTIME['rgb_handles'] = []
+    runtime_state['rgb_handles'] = []
     band_keys = ['band_R', 'band_G', 'band_B']
     line_colors = ['red', 'green', 'blue']
 
     for i in range(3):
-        should_fill, value = infer_runtime_RGB_value(_RUNTIME[band_keys[i]])
+        should_fill, value = infer_runtime_RGB_value(runtime_state[band_keys[i]])
         if not should_fill:
-            _RUNTIME['rgb_handles'].append(ax_px_plot.axvline(x=value, color=line_colors[i]))
+            runtime_state['rgb_handles'].append(ax_px_plot.axvline(x=value, color=line_colors[i]))
 
     update_band_wl_textblocks()
 
@@ -562,17 +199,16 @@ def update_band_wl_textblocks():
     wl_textblock_keys = [guiek_r_wl_text, guiek_g_wl_text, guiek_b_wl_text]
     band_keys = ['band_R', 'band_G', 'band_B']
     for i in range(3):
-        should_fill, value = infer_runtime_RGB_value(_RUNTIME[band_keys[i]])
-        if not should_fill and _RUNTIME['cube_wls'] is not None:
-            _RUNTIME['window'][wl_textblock_keys[i]].update(f"{_RUNTIME['cube_wls'][value]:.2f} nm")
+        should_fill, value = infer_runtime_RGB_value(runtime_state[band_keys[i]])
+        if not should_fill and runtime_state['cube_wls'] is not None:
+            runtime_state['window'][wl_textblock_keys[i]].update(f"{runtime_state['cube_wls'][value]:.2f} nm")
         elif should_fill:
-            _RUNTIME['window'][wl_textblock_keys[i]].update(f"---.-- nm")
+            runtime_state['window'][wl_textblock_keys[i]].update(f"---.-- nm")
 
 
 def update_spectral_clip_wl_text():
-    guiek_spectal_clip_min_wl_text
-    _RUNTIME['window'][guiek_spectal_clip_min_wl_text].update(f"{_RUNTIME['cube_wls'][_RUNTIME['spectral_clip_min']]:.2f} nm")
-    _RUNTIME['window'][guiek_spectal_clip_max_wl_text].update(f"{_RUNTIME['cube_wls'][_RUNTIME['spectral_clip_max']]:.2f} nm")
+    runtime_state['window'][guiek_spectal_clip_min_wl_text].update(f"{runtime_state['cube_wls'][runtime_state['spectral_clip_min']]:.2f} nm")
+    runtime_state['window'][guiek_spectal_clip_max_wl_text].update(f"{runtime_state['cube_wls'][runtime_state['spectral_clip_max']]:.2f} nm")
 
 
 def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None, x1=None, y1=None):
@@ -594,12 +230,12 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
     """
 
     # Draw new plot and refersh canvas
-    _RUNTIME['fig_agg_px_plot'].get_tk_widget().forget()
-    ax_px_plot.set_xlim(_RUNTIME['spectral_clip_min'], _RUNTIME['spectral_clip_max'])
+    runtime_state['fig_agg_px_plot'].get_tk_widget().forget()
+    ax_px_plot.set_xlim(runtime_state['spectral_clip_min'], runtime_state['spectral_clip_max'])
     update_spectral_clip_wl_text()
 
     plot_color = None
-    ylim = _RUNTIME['px_plot_ylim']
+    ylim = runtime_state['px_plot_ylim']
 
     # Plot the plot and save it. Update
     if spectrum is not None:
@@ -607,9 +243,9 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
         p = ax_px_plot.plot(spectrum)
         plot_color = p[-1].get_color()
 
-        _RUNTIME['plots'].append(spectrum)
+        runtime_state['plots'].append(spectrum)
         new_plot_max = 0
-        for plot in _RUNTIME['plots']:
+        for plot in runtime_state['plots']:
             plot_max = np.max(plot)
             if plot_max > new_plot_max:
                 new_plot_max = plot_max
@@ -618,14 +254,14 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
         # Set ylim a little higher than the max value of any of the plots
         auto_ylim = new_plot_max * 1.05
         if ylim is None:
-            _RUNTIME['px_plot_ylim_auto'] = auto_ylim
+            runtime_state['px_plot_ylim_auto'] = auto_ylim
             ax_px_plot.set_ylim(0, auto_ylim)
         else:
             try:
                 ax_px_plot.set_ylim(0, ylim)
             except:
                 print("Could not set y-axis limit from user feed. Using automatic y-axis limit.")
-                _RUNTIME['px_plot_ylim_auto'] = auto_ylim
+                runtime_state['px_plot_ylim_auto'] = auto_ylim
                 ax_px_plot.set_ylim(0, auto_ylim)
 
     # Even if new spectrum was not given, we can try to update ylim
@@ -633,12 +269,12 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
         if ylim is not None:
             ax_px_plot.set_ylim(0, ylim)
         else:
-            ax_px_plot.set_ylim(0, _RUNTIME['px_plot_ylim_auto'])
+            ax_px_plot.set_ylim(0, runtime_state['px_plot_ylim_auto'])
 
-    bands = _RUNTIME['cube_bands']
-    wls = _RUNTIME['cube_wls']
+    bands = runtime_state['cube_bands']
+    wls = runtime_state['cube_wls']
 
-    if bands is not None and wls is not None and _RUNTIME['sec_axes_px_plot'] is None:
+    if bands is not None and wls is not None and runtime_state['sec_axes_px_plot'] is None:
 
         # Hack to print into light form for HyperBlend
         # s_max = np.max(spectrum)
@@ -657,31 +293,31 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
         secax = ax_px_plot.secondary_xaxis('top', functions=(forward, inverse))
         secax.xaxis.set_tick_params(labelsize=tick_label_font_size)
         secax.set_xlabel(r"Wavelength [$nm$]", fontsize=axis_label_font_size)
-        _RUNTIME['sec_axes_px_plot'] = secax
+        runtime_state['sec_axes_px_plot'] = secax
 
     if std is not None:
-        ax_px_plot.fill_between(_RUNTIME['cube_bands'], spectrum - (std / 2), spectrum + (std / 2), alpha=0.2)
+        ax_px_plot.fill_between(runtime_state['cube_bands'], spectrum - (std / 2), spectrum + (std / 2), alpha=0.2)
 
-    _RUNTIME['fig_agg_px_plot'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
+    runtime_state['fig_agg_px_plot'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
 
     # Draw rectangle over RGB canvas and refresh
     if std is not None and x0 is not None and y0 is not None and x1 is not None and y1 is not None:
         width = math.fabs(x0 - x1)
         height = math.fabs(y0 - y1)
-        _RUNTIME['fig_agg_false_color'].get_tk_widget().forget()
+        runtime_state['fig_agg_false_color'].get_tk_widget().forget()
         if plot_color is not None:
             handle = ax_false_color.add_patch(Rectangle((x0, y0), width=width, height=height, fill=False, edgecolor=plot_color))
         else:
             handle = ax_false_color.add_patch(Rectangle((x0, y0), width=width, height=height, fill=False, edgecolor='gray'))
-        _RUNTIME['rectangle_handles'].append(handle)
-        _RUNTIME['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
+        runtime_state['rectangle_handles'].append(handle)
+        runtime_state['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
 
     # Draw click location as a dot
     elif x0 is not None and y0 is not None:
-        _RUNTIME['fig_agg_false_color'].get_tk_widget().forget()
+        runtime_state['fig_agg_false_color'].get_tk_widget().forget()
         handle = ax_false_color.scatter(int(x0), int(y0))
-        _RUNTIME['dot_handles'].append(handle)
-        _RUNTIME['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
+        runtime_state['dot_handles'].append(handle)
+        runtime_state['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
 
 
 def update_false_color_canvas():
@@ -695,315 +331,63 @@ def update_false_color_canvas():
     If not, get RGB from metadata.
     """
 
-    if _RUNTIME['cube_data'] is None:
+    if runtime_state['cube_data'] is None:
         print(f"Cube not set. Nothing to clear.")
         return
 
-    possibly_R_str = str(_RUNTIME['band_R'])
-    possibly_G_str = str(_RUNTIME['band_G'])
-    possibly_B_str = str(_RUNTIME['band_B'])
-    meta_bands = [int(band) - 1 for band in _RUNTIME['cube_data'].metadata['default bands']]
+    possibly_R_str = str(runtime_state['band_R'])
+    possibly_G_str = str(runtime_state['band_G'])
+    possibly_B_str = str(runtime_state['band_B'])
+    meta_bands = [int(band) - 1 for band in runtime_state['cube_data'].metadata['default bands']]
 
     if len(possibly_R_str) == 0: # empty string
         possibly_R_str = str(meta_bands[0])
-        _RUNTIME['band_R'] = possibly_R_str
+        runtime_state['band_R'] = possibly_R_str
     if len(possibly_G_str) == 0: # empty string
         possibly_G_str = str(meta_bands[1])
-        _RUNTIME['band_G'] = possibly_G_str
+        runtime_state['band_G'] = possibly_G_str
     if len(possibly_B_str) == 0: # empty string
         possibly_B_str = str(meta_bands[2])
-        _RUNTIME['band_B'] = possibly_B_str
+        runtime_state['band_B'] = possibly_B_str
 
-    view_mode = _RUNTIME['view_mode']
+    view_mode = runtime_state['view_mode']
 
-    def img_array_to_rgb(img_array: np.array, possible_R: str, possible_G: str, possible_B: str):
+    if view_mode == 'cube' and not runtime_state['selecting_white']:
 
-        max_band = img_array.shape[2] - 1
-        possibles = [possible_R, possible_G, possible_B]
-        # initialize rgb image as a list of separate one channel images
-        img_rgb = []
-
-        for i in range(3):
-
-            should_fill, value = infer_runtime_RGB_value(possibles[i])
-
-            if should_fill:
-                img_X = np.ones_like(img_array[:, :, 0]) * value
-            else:
-                img_X = img_array[:, :, np.clip(value, 0, max_band)]
-
-            img_rgb.append(img_X)
-
-        # Stack list of one channel images to make proper numpy array
-        img_rgb = np.stack(img_rgb, axis=2)
-
-        """
-        Scale the image somehow in hope it will look sensible on the screen
-
-        Take a histogram of the RGB image and use one of the bin edges near the end 
-        to scale the pixel values down. This should let some of the brightest pixels (specular 
-        reflections) to clip so that they do not make the whole image too dark.              
-        """
-
-        logging.info(f"RGB image max value: {np.max(img_rgb)}, median: { np.median(img_rgb)}, mean: {np.mean(img_rgb)}")
-
-        # Arbitrary bin count that seems to work OK
-        histogram, bin_edges = np.histogram(img_rgb, bins=10)
-
-        # Arbitrary selection of the cut point. Could be done better using the derivative of the histogram?
-        scale = bin_edges[-3]
-
-        # Debugging print out of the bin edges in case the binning needs to be adjusted later.
-        # for i,bin_edge in enumerate(bin_edges):
-        #     if i > 0:
-        #         print(f"Bin edges: {bin_edge} val {histogram[i-1]}")
-
-        logging.info(f"I'll try to scale the RGB image down by {scale:.2f} before gamma correction.")
-
-        img_rgb = img_rgb / scale
-        img_rgb = np.sqrt(img_rgb)
-
-        logging.info(f"RGB image after scaling; max value: {np.max(img_rgb)}, median: {np.median(img_rgb)}, mean: { np.mean(img_rgb)}")
-
-        return img_rgb
-
-    if view_mode == 'cube' and not _RUNTIME['selecting_white']:
-
-        if _RUNTIME['img_array'] is None:
+        if runtime_state['img_array'] is None:
             print(f"Image array None. Nothing to show.")
             return
 
-        false_color_rgb = img_array_to_rgb(_RUNTIME['img_array'], possibly_R_str, possibly_G_str, possibly_B_str)
+        false_color_rgb = img_array_to_rgb(runtime_state['img_array'], possibly_R_str, possibly_G_str, possibly_B_str)
 
     elif view_mode == 'dark':
 
-        if _RUNTIME['img_array_dark'] is None:
+        if runtime_state['img_array_dark'] is None:
             print(f"Image array for dark is None. Nothing to show.")
             return
 
-        false_color_rgb = img_array_to_rgb(_RUNTIME['img_array_dark'], possibly_R_str, possibly_G_str, possibly_B_str)
+        false_color_rgb = img_array_to_rgb(runtime_state['img_array_dark'], possibly_R_str, possibly_G_str, possibly_B_str)
 
-    elif view_mode == 'white' or _RUNTIME['selecting_white']:
+    elif view_mode == 'white' or runtime_state['selecting_white']:
 
-        if _RUNTIME['img_array_white'] is None:
+        if runtime_state['img_array_white'] is None:
             print(f"Image array for white is None. Nothing to show.")
             return
 
-        false_color_rgb = img_array_to_rgb(_RUNTIME['img_array_white'], possibly_R_str, possibly_G_str, possibly_B_str)
+        false_color_rgb = img_array_to_rgb(runtime_state['img_array_white'], possibly_R_str, possibly_G_str, possibly_B_str)
     else:
         print(f"WARNING: unknown view mode '{view_mode}' and/or selection combination selecting "
-              f"white={_RUNTIME['selecting_white']}.")
+              f"white={runtime_state['selecting_white']}.")
         return
 
-    _RUNTIME['fig_agg_false_color'].get_tk_widget().forget()
+    runtime_state['fig_agg_false_color'].get_tk_widget().forget()
     # Clear axis object because if the next image is of different size,
     # it will break pixel indexing for mouse selection
     ax_false_color.cla()
     ax_false_color.imshow(false_color_rgb)
     ax_false_color.set_xlabel('Samples', fontsize=axis_label_font_size)
     ax_false_color.set_ylabel('Lines', fontsize=axis_label_font_size)
-    _RUNTIME['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
-
-
-def cube_meta():
-    """Read cube metadata and print on UI element.
-
-    Also sets pixel plot axis according to metadata.
-    """
-
-    cube_data = _RUNTIME['cube_data']
-
-    if cube_data is None:
-        print(f"Cube data not set. Returning without doing nothing.")
-        return
-
-    walength_set = False
-
-    for key,value in cube_data.metadata.items():
-        if key.lower() == 'wavelength':
-            _RUNTIME['cube_wls'] = np.array(list(float(v) for v in value))
-            # print(_VARS['cube_wls'])
-            _RUNTIME['cube_bands'] = np.arange(start=0, stop=len(value), step=1)
-            _RUNTIME['spectral_clip_min'] = 0
-            _RUNTIME['spectral_clip_max'] = len(value) - 1
-            update_spectral_clip_wl_text()
-            # print(f"len wls: {len(_VARS['cube_wls'])}")
-            # print(f"len bands: {len(_VARS['cube_bands'])}")
-            walength_set = True
-        elif key.lower() == 'fwhm':
-            # TODO use these for variance in Gaussian for RGB?
-            continue
-        else:
-            window[guiek_cube_meta_text].print(f"{key}: {value}")
-
-    if not walength_set:
-        print(f"Could not set wavelengths and bands.")
-        return
-
-
-def find_cube(path: str, mode: str):
-    """Finds a cube, and if it is OK, opens it.
-
-    :param path:
-        Path to the cube. Can be path to either .hdr, .raw, .log etc.
-        Correct files are inferred based on the base name of the file
-        without the postfix.
-    :param mode:
-        Either 'cube', 'dark' or 'white'.
-    """
-
-    selected_dir_path = os.path.dirname(path)
-    selected_file_name = os.path.basename(path)
-    base_name = selected_file_name.rsplit(sep='.', maxsplit=1)[0]
-
-    print(f"File: '{selected_file_name}' in '{selected_dir_path}'. Base name is '{base_name}'.")
-
-    hdr_found = False
-    raw_found = False
-    reflectance_found = False
-
-    hdr_file_name = None
-    cube_file_name = None
-
-    file_list = os.listdir(selected_dir_path)
-    for file_name in file_list:
-        fn_wo_postfix = file_name.rsplit(sep='.', maxsplit=1)[0]
-        if fn_wo_postfix == base_name and file_name.lower().endswith(".hdr"):
-            hdr_found = True
-            hdr_file_name = file_name
-        if fn_wo_postfix == base_name and file_name.lower().endswith(".raw"):
-            raw_found = True
-            cube_file_name = file_name
-        if fn_wo_postfix == base_name and (file_name.lower().endswith(".dat") or file_name.lower().endswith(".img")):
-            reflectance_found = True
-            cube_file_name = file_name
-
-    if hdr_found and (raw_found or reflectance_found):
-        print(f"Envi cube files OK. ")
-        hdr_path = os.path.join(selected_dir_path, hdr_file_name)
-        raw_path = os.path.join(selected_dir_path, cube_file_name)
-
-        if mode == 'cube':
-            _STATE['main_cube_hdr_path'] = hdr_path
-            _STATE['main_cube_data_path'] = raw_path
-
-            # Set the flag after the cube is properly loaded
-            _RUNTIME['cube_is_reflectance'] = reflectance_found
-            if reflectance_found:
-                # We'll need to put white_corrected flag also on, so that the RGB draw knows we are dealing with floats
-                _RUNTIME['white_corrected'] = True
-        elif mode == 'dark':
-            _STATE['dark_cube_hdr_path'] = hdr_path
-            _STATE['dark_cube_data_path'] = raw_path
-        elif mode == 'white':
-            _STATE['white_cube_hdr_path'] = hdr_path
-            _STATE['white_cube_data_path'] = raw_path
-        else:
-            print(f"ERROR Unsupported mode '{mode}' for find_cube().")
-
-        # We managed to find a proper file, so might as well set the path to memory for saving plots
-        _RUNTIME['cube_dir_path'] = selected_dir_path
-        open_cube(hdr_path=hdr_path, data_path=raw_path, mode=mode)
-    else:
-        print(f"Not OK. Either hdr or raw file not found from given directory.")
-
-
-def open_cube(hdr_path, data_path, mode):
-    """Opens a hyperspectral image cube.
-
-    Sets pixel plot axis from metadata if mode == 'cube'.
-    Connects mouse click handlers and updates the false color canvas.
-
-    :param hdr_path:
-        Path to the ENVI header file.
-    :param data_path:
-        Path to the ENVI data file.
-    :param mode:
-        One of 'cube', 'dark' or 'white'.
-    """
-
-    if hdr_path is None or data_path is None:
-        print(f"Either HDR path or DATA path was None. Cannot open cube.")
-        return
-
-    cube_data = envi.open(file=hdr_path, image=data_path)
-    img_array = cube_data.load().asarray()
-
-    if mode == 'cube':
-
-        _RUNTIME['cube_data'] = cube_data
-        _RUNTIME['img_array'] = img_array
-
-        # Set things up using metadata
-        # TODO this should work even if the cube is not selected? Perhaps not as it doesn't make much sense.
-        clear_plot()
-        cube_meta()
-
-    elif mode == 'dark':
-        _RUNTIME['img_array_dark'] = img_array
-    elif mode == 'white':
-        _RUNTIME['img_array_white'] = img_array
-    else:
-        print(f"WARNING: Unsupported mode '{mode}' for open_cube().")
-
-    # Connect mouse click
-    if not _RUNTIME['mouse_handlers_connected']:
-        cid_press = fig_false_color.canvas.mpl_connect('button_press_event', mouse_click_event)
-        cid_release = fig_false_color.canvas.mpl_connect('button_release_event', mouse_release_event)
-        _RUNTIME['mouse_handlers_connected'] = True
-
-    # Draw cube to canvas
-    update_false_color_canvas()
-    update_band_wl_textblocks()
-
-
-def calc_dark():
-    """Calculates dark correction for current cube.
-
-    Updates the false color canvas after done.
-    """
-
-    print(f"Dark calculation called...")
-
-    if _RUNTIME['img_array'] is None:
-        print(f"Cannot calculate dark because image array is None. Select a cube first.")
-        return
-
-    dark_spectrum = _RUNTIME['dark_median']
-    if dark_spectrum is None:
-        print(f"Cannot calculate dark because dark median is None. Select a dark cube first.")
-        return
-
-    # FIXME subtract the MEDIAN of the dark. Not the mean
-    _RUNTIME['img_array'] = _RUNTIME['img_array'] - dark_spectrum
-    _RUNTIME['img_array'] = np.clip(_RUNTIME['img_array'], a_min=0, a_max=None)
-    _RUNTIME['img_array'] = _RUNTIME['img_array']
-
-    _RUNTIME['view_mode'] = 'cube'
-    _RUNTIME['dark_corrected'] = True
-    update_false_color_canvas()
-
-
-def calc_white():
-
-    print(f"White calculation called...")
-
-    if _RUNTIME['img_array'] is None:
-        print(f"Cannot calculate dark because image array is None. Select a cube first.")
-        return
-
-    white_spectrum = _RUNTIME['white_spectra']
-    if white_spectrum is None:
-        print(f"Cannot calculate white because white spectrum is None. Select a region from the white cube first.")
-        return
-
-    white_spectrum = white_spectrum - _RUNTIME['dark_median']
-
-    _RUNTIME['img_array'] = np.divide(_RUNTIME['img_array'], white_spectrum, dtype=np.float32)
-    _RUNTIME['white_corrected'] = True
-
-    _RUNTIME['view_mode'] = 'cube'
-    update_false_color_canvas()
+    runtime_state['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
 
 
 def clear_plot():
@@ -1013,121 +397,27 @@ def clear_plot():
     """
 
     print(f"Clearing pixel plot")
-    _RUNTIME['fig_agg_px_plot'].get_tk_widget().forget()
+    runtime_state['fig_agg_px_plot'].get_tk_widget().forget()
     ax_px_plot.clear()
-    _RUNTIME['fig_agg_px_plot'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
+    runtime_state['fig_agg_px_plot'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
 
     print(f"Clearing false color RGB")
     # Remove rectangles and other Artists
     # while ax_false_color.patches:
     #     ax_false_color.patches[0].remove()
-    for handle in _RUNTIME['rectangle_handles']:
+    for handle in runtime_state['rectangle_handles']:
         handle.remove()
-    for handle in _RUNTIME['dot_handles']:
+    for handle in runtime_state['dot_handles']:
         handle.remove()
-    for handle in _RUNTIME['rgb_handles']:
+    for handle in runtime_state['rgb_handles']:
         handle.remove()
 
-    _RUNTIME['rectangle_handles'] = []
-    _RUNTIME['dot_handles'] = []
-    _RUNTIME['rgb_handles'] = []
-    _RUNTIME['sec_axes_px_plot'] = None
-    _RUNTIME['plots'] = []
+    runtime_state['rectangle_handles'] = []
+    runtime_state['dot_handles'] = []
+    runtime_state['rgb_handles'] = []
+    runtime_state['sec_axes_px_plot'] = None
+    runtime_state['plots'] = []
     update_false_color_canvas()
-
-
-def state_save():
-    """Save the _STATE dict to disk.
-    """
-
-    _STATE['band_R'] = str(_RUNTIME['band_R'])
-    _STATE['band_G'] = str(_RUNTIME['band_G'])
-    _STATE['band_B'] = str(_RUNTIME['band_B'])
-
-    TH.write_dict_as_toml(dictionary=_STATE, directory=state_dir_path, filename=state_file_name)
-    print(f"State saved")
-
-
-def state_load():
-    """Load state from disk and sets _STATE global dict.
-
-    Also sets RGB bands to _RUNTIME global dict.
-    """
-
-    state = TH.read_toml_as_dict(directory=state_dir_path, filename=state_file_name)
-    for key, value in state.items():
-        _STATE[key] = value
-
-    _RUNTIME['band_R'] = str(_STATE['band_R'])
-    _RUNTIME['band_G'] = str(_STATE['band_G'])
-    _RUNTIME['band_B'] = str(_STATE['band_B'])
-
-    print(f"Previous state loaded.")
-
-
-def update_UI_component_state():
-    """Updates the disabled state of all UI buttons and RGB inboxes."""
-
-    # First, disable all
-    window[guiek_cube_show_button].update(disabled=True)
-
-    window[guiek_dark_file_browse].update(disabled=True)
-    window[guiek_dark_show_button].update(disabled=True)
-
-    window[guiek_white_file_browse].update(disabled=True)
-    window[guiek_white_show_button].update(disabled=True)
-    window[guiek_white_select_region].update(disabled=True)
-    window[guiek_white_select_whole].update(disabled=True)
-    window[guiek_calc_white].update(disabled=True)
-
-    window[guiek_save_cube].update(disabled=True)
-    window[guiek_save_figures].update(disabled=True)
-
-    if _RUNTIME['img_array'] is not None:
-        window[guiek_cube_show_button].update(disabled=False)
-
-        if not _RUNTIME['cube_is_reflectance']:
-            window[guiek_dark_file_browse].update(disabled=False)
-            window[guiek_white_file_browse].update(disabled=False)
-
-    # We only need calculation stuff is loaded cube is not already reflectance
-    if not _RUNTIME['cube_is_reflectance']:
-
-        if _RUNTIME['img_array_dark'] is not None:
-            window[guiek_dark_show_button].update(disabled=False)
-            if not _RUNTIME['dark_corrected'] and _RUNTIME['dark_median'] is not None:
-                window[guiek_calc_dark].update(disabled=False)
-            else:
-                window[guiek_calc_dark].update(disabled=True)
-        if _RUNTIME['img_array_white'] is not None:
-            window[guiek_white_show_button].update(disabled=False)
-            window[guiek_white_select_region].update(disabled=False)
-            window[guiek_white_select_whole].update(disabled=False)
-            if not _RUNTIME['white_corrected'] and _RUNTIME['white_spectra'] is not None and _RUNTIME['dark_corrected']:
-                window[guiek_calc_white].update(disabled=False)
-            else:
-                window[guiek_calc_white].update(disabled=True)
-
-        if _RUNTIME['white_corrected'] or _RUNTIME['dark_corrected']:
-            window[guiek_save_cube].update(disabled=False)
-
-    if _RUNTIME['cube_dir_path'] is not None:
-        window[guiek_save_figures].update(disabled=False)
-
-    # Update the RGB inboxes as well
-    window[guiek_r_input].update(str(_RUNTIME['band_R']))
-    window[guiek_g_input].update(str(_RUNTIME['band_G']))
-    window[guiek_b_input].update(str(_RUNTIME['band_B']))
-
-    window[guiek_spectral_min_input].update(str(_RUNTIME['spectral_clip_min']))
-    window[guiek_spectral_max_input].update(str(_RUNTIME['spectral_clip_max']))
-
-
-def get_base_name_wo_postfix(path: str) -> str:
-    """Returns the file name in given path without the postfix such as .hdr."""
-
-    base_name = os.path.basename(path).rsplit('.', maxsplit=1)[0]
-    return base_name
 
 
 def restore_from_previous_session():
@@ -1138,89 +428,116 @@ def restore_from_previous_session():
 
     print(f"Trying to restore state from previous session.")
 
-    if _STATE['main_cube_hdr_path'] is not None:
-        path = _STATE['main_cube_hdr_path']
+    save_state = get_save_state()
+    if save_state['main_cube_hdr_path'] is not None:
+        path = save_state['main_cube_hdr_path']
         window[guiek_cube_show_filename].update(value=get_base_name_wo_postfix(path))
         handle_cube_file_selected(path)
-    if _STATE['dark_cube_hdr_path'] is not None:
-        path = _STATE['dark_cube_hdr_path']
+    if save_state['dark_cube_hdr_path'] is not None:
+        path = save_state['dark_cube_hdr_path']
         window[guiek_dark_show_filename].update(value=get_base_name_wo_postfix(path))
         handle_dark_file_selected(path)
-    if _STATE['white_cube_hdr_path'] is not None:
-        path = _STATE['white_cube_hdr_path']
+    if save_state['white_cube_hdr_path'] is not None:
+        path = save_state['white_cube_hdr_path']
         window[guiek_white_show_filename].update(value=get_base_name_wo_postfix(path))
         handle_white_file_selected(path)
 
-    _RUNTIME['view_mode'] = 'cube'
+    runtime_state['view_mode'] = 'cube'
     update_false_color_canvas()
 
 
 def handle_cube_file_selected(file_path:str):
 
     # Reset in case a new cube is selected
-    _RUNTIME['selecting_white'] = False
-    _RUNTIME['view_mode'] = 'cube'
+    runtime_state['selecting_white'] = False
+    runtime_state['view_mode'] = 'cube'
 
-    _RUNTIME['dark_median'] = None
-    _RUNTIME['img_array_dark'] = None
-    _RUNTIME['dark_corrected'] = False
+    runtime_state['dark_median'] = None
+    runtime_state['img_array_dark'] = None
+    runtime_state['dark_corrected'] = False
 
-    _RUNTIME['white_spectra'] = None
-    _RUNTIME['img_array_white'] = None
-    _RUNTIME['white_corrected'] = False
+    runtime_state['white_spectra'] = None
+    runtime_state['img_array_white'] = None
+    runtime_state['white_corrected'] = False
 
-    find_cube(file_path, mode='cube')
+    try_to_open_cube(file_path, mode='cube')
     update_false_color_canvas()
-    update_UI_component_state()
+    update_UI_component_state(RUNTIME=runtime_state)
 
+
+def try_to_open_cube(path: str, mode: str):
+
+    can_open, hdr_path, raw_path = find_cube(path, mode=mode, save_state=get_save_state(), runtime_state=runtime_state)
+
+    if can_open:
+
+        open_cube(hdr_path=hdr_path, data_path=raw_path, mode=mode, runtime_state=runtime_state)
+
+        if mode == 'cube':
+            clear_plot()
+            cube_meta(window[guiek_cube_meta_text], runtime_state=runtime_state)
+
+        # Connect mouse click if not connected
+        if not runtime_state['mouse_handlers_connected']:
+            cid_press = fig_false_color.canvas.mpl_connect('button_press_event', mouse_click_event)
+            cid_release = fig_false_color.canvas.mpl_connect('button_release_event', mouse_release_event)
+            runtime_state['mouse_handlers_connected'] = True
+
+        # Draw cube to canvas
+        update_false_color_canvas()
+        update_band_wl_textblocks()
+        update_spectral_clip_wl_text()
 
 def handle_dark_file_selected(file_path: str):
 
-    _RUNTIME['view_mode'] = 'dark'
+    runtime_state['view_mode'] = 'dark'
 
-    find_cube(file_path, mode='dark')
+    try_to_open_cube(file_path, mode='dark')
     # image_array_dark should now have a value
-    dark_cube = _RUNTIME['img_array_dark']
+    dark_cube = runtime_state['img_array_dark']
     print(f"Dark cube set. Calculating median of the scan lines. WAIT a bit, please.")
 
     # Scan lines are on axis=0
     med = np.median(dark_cube, axis=0)
     # print(f"DEBUG: dark median shape: {med.shape}")
-    _RUNTIME['dark_median'] = med
+    runtime_state['dark_median'] = med
 
     print(f"Dark median saved.")
     update_false_color_canvas()
-    update_UI_component_state()
+    update_UI_component_state(RUNTIME=runtime_state)
 
 
 def handle_white_file_selected(file_path: str):
-    _RUNTIME['selecting_white'] = True
-    _RUNTIME['view_mode'] = 'white'
-    find_cube(file_path, mode='white')
-    _RUNTIME['selecting_white'] = False
+    runtime_state['selecting_white'] = True
+    runtime_state['view_mode'] = 'white'
+    try_to_open_cube(file_path, mode='white')
+    runtime_state['selecting_white'] = False
 
     print(f"White cube set.")
 
     update_false_color_canvas()
-    update_UI_component_state()
+    update_UI_component_state(RUNTIME=runtime_state)
 
 
 def save_reflectance_cube():
-    basepath = str(_STATE['main_cube_hdr_path']).rsplit('.', maxsplit=1)[0]
-    if _RUNTIME['white_corrected']:
+    save_state = get_save_state()
+    basepath = str(save_state['main_cube_hdr_path']).rsplit('.', maxsplit=1)[0]
+    if runtime_state['white_corrected']:
         save_hdr_path = f"{basepath}_CI_reflectance.hdr"
-    elif _RUNTIME['dark_corrected']:
+    elif runtime_state['dark_corrected']:
         save_hdr_path = f"{basepath}_CI_darkcorrected.hdr"
+    else:
+        raise RuntimeError(f"Cannot save cube: runtime state not recognized.")
     print(f"Trying to save cube to '{save_hdr_path}'.")
-    spy.envi.save_image(hdr_file=save_hdr_path, image=_RUNTIME['img_array'], dtype=np.float32, ext='.dat', metadata=_RUNTIME['cube_data'].metadata)
+    spy.envi.save_image(hdr_file=save_hdr_path, image=runtime_state['img_array'], dtype=np.float32, ext='.dat', metadata=runtime_state['cube_data'].metadata)
     print(f"Cube saved.")
 
 
 def save_figures():
     """Saves false color RGB image and pixel plot to disk to same path where the cubes are in."""
 
-    path_save_rgb = _RUNTIME['cube_dir_path'] + '/' + 'false_rgb.png'
-    path_save_px_plot = _RUNTIME['cube_dir_path'] + '/' + 'pixel_plot.png'
+    path_save_rgb = runtime_state['cube_dir_path'] + '/' + 'false_rgb.png'
+    path_save_px_plot = runtime_state['cube_dir_path'] + '/' + 'pixel_plot.png'
 
     # Pyplot reference figures by index number so this way we can save them separately.
     plt.figure(1)
@@ -1272,12 +589,12 @@ def main():
             feed = values[guiek_ylim_input]
             if len(feed) == 0:
                 print("empty ylim input. setting it to none")
-                _RUNTIME['px_plot_ylim'] = None
+                runtime_state['px_plot_ylim'] = None
                 update_px_plot()
             else:
                 try:
                     feed_int = float(feed)
-                    _RUNTIME['px_plot_ylim'] = feed_int
+                    runtime_state['px_plot_ylim'] = feed_int
                     update_px_plot()
                 except:
                     print(f"Could not cast y-axis limit input '{feed}' into a float. Ignoring input.")
@@ -1295,34 +612,36 @@ def main():
             handle_white_file_selected(values[guiek_white_file_browse])
 
         elif event == guiek_cube_show_button:
-            _RUNTIME['view_mode'] = 'cube'
+            runtime_state['view_mode'] = 'cube'
             update_false_color_canvas()
 
         elif event == guiek_dark_show_button:
-            _RUNTIME['view_mode'] = 'dark'
+            runtime_state['view_mode'] = 'dark'
             update_false_color_canvas()
 
         elif event == guiek_white_show_button:
-            _RUNTIME['view_mode'] = 'white'
+            runtime_state['view_mode'] = 'white'
             update_false_color_canvas()
 
         elif event == guiek_white_select_region:
-            _RUNTIME['selecting_white'] = True
+            runtime_state['selecting_white'] = True
             print(f"White region selection is now on. Drag across the image to select an "
                   f"area which will be used as a white reference.")
 
         elif event == guiek_white_select_whole:
-            white_array = _RUNTIME['img_array_white']
+            white_array = runtime_state['img_array_white']
             white_mean = np.mean(white_array, axis=(0,1))
-            _RUNTIME['white_spectra'] = white_mean
+            runtime_state['white_spectra'] = white_mean
             print(f"White reference spectra set. You can now use the Calculate button to "
                   f"calculate reflectance.")
 
         elif event == guiek_calc_dark:
-            calc_dark()
+            calc_dark(runtime_state=runtime_state)
+            update_false_color_canvas()
 
         elif event == guiek_calc_white:
-            calc_white()
+            calc_white(runtime_state=runtime_state)
+            update_false_color_canvas()
 
         elif event == guiek_save_cube:
             save_reflectance_cube()
@@ -1339,9 +658,9 @@ def main():
                 _, _ = infer_runtime_RGB_value(values[guiek_r_input])
                 _, _ = infer_runtime_RGB_value(values[guiek_g_input])
                 _, _ = infer_runtime_RGB_value(values[guiek_b_input])
-                _RUNTIME['band_R'] = values[guiek_r_input] #int(values[guiek_r_input])
-                _RUNTIME['band_G'] = values[guiek_g_input] #int(values[guiek_g_input])
-                _RUNTIME['band_B'] = values[guiek_b_input] #int(values[guiek_b_input])
+                runtime_state['band_R'] = values[guiek_r_input] #int(values[guiek_r_input])
+                runtime_state['band_G'] = values[guiek_g_input] #int(values[guiek_g_input])
+                runtime_state['band_B'] = values[guiek_b_input] #int(values[guiek_b_input])
                 update_px_rgb_lines()
                 update_px_plot()
                 update_false_color_canvas()
@@ -1352,7 +671,7 @@ def main():
             print("We should not have arrived in here in the main loop iffing.")
 
         # Update UI after every event is handled.
-        update_UI_component_state()
+        update_UI_component_state(RUNTIME=runtime_state)
 
     state_save()
     window.close()
