@@ -12,6 +12,7 @@ import math
 
 import spectral as spy
 import numpy as np
+from matplotlib import ticker
 from matplotlib.patches import Rectangle
 
 from src.cube_handling import find_cube, calc_dark, calc_white, cube_meta, open_cube
@@ -260,9 +261,10 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
         def inverse(x):
             return np.interp(x, wls, bands)
 
-        # FIXME the wavelength axis is not perfect as two figures are shown at the extremes
+        # The ticks at the secondary axis are not perfect but good enough for now
         secax = ax_px_plot.secondary_xaxis('top', functions=(forward, inverse))
-        secax.xaxis.set_tick_params(labelsize=tick_label_font_size)
+        secax.set_xticks(wls)
+        secax.xaxis.set_tick_params(labelsize=tick_label_font_size, rotation=70)
         secax.set_xlabel(r"Wavelength [$nm$]", fontsize=axis_label_font_size)
         runtime_state['sec_axes_px_plot'] = secax
 
