@@ -1,37 +1,9 @@
 """
 
-#Ohjeita
-
-#fle ex -> koodit  -> open git bash here
-#tarkasta branchi (lue)
-#git status - onko fine, onko mitään punaisella jne
-#git pull - jos joku on tehnyt muutoksia, saadaan tuorein versio
-#avaa pycharm
-
-#mutoksia tapahtuu
-#tallenna
-
-#töiden lopetus
-#git status
-#git commit -am 'tähän kommentti'
-#git status - varmistetaan onko ok
-#git push
-#salasana
-
-
-#sg.Push
-#sg.VPush
-#sg.sizegrip
-
-
-
-Cube Inspector is almost fully implemented in this one main file.
-
-
 Some resources that might be useful:
 
 Documentation for PySimpleGUI: https://www.pysimplegui.org/en/latest/
-Github project PySimpleGUI: https://github.com/PySimpleGUI/PySimpleGUI
+GitHub project PySimpleGUI: https://github.com/PySimpleGUI/PySimpleGUI
 
 Refreshing plot: https://gist.github.com/KenoLeon/e913de9e1fe690ebe287e6d1e54e3b97
 """
@@ -45,7 +17,7 @@ from matplotlib.patches import Rectangle
 from src.cube_handling import find_cube, calc_dark, calc_white, cube_meta, open_cube
 from src.ui import *
 from src.state import state_load, state_save, get_runtime_state, update_runtime_ui_components, get_save_state
-from src.utils import get_base_name_wo_postfix, img_array_to_rgb, infer_runtime_RGB_value
+from src.utils import get_base_name_wo_postfix, img_array_to_rgb, infer_runtime_RGB_value, cube_dimensions
 
 # TODO Incorporate dark and white selection logic with buttons.
 # TODO Show corresponding wl for RGB band selection. In plot or as a text box?
@@ -58,6 +30,7 @@ spy.settings.envi_support_nonlowercase_params = True
 window, fig_px_plot, fig_false_color, ax_px_plot, ax_false_color = initialize_ui()
 update_runtime_ui_components(window, fig_px_plot, fig_false_color, guiek_pixel_plot_canvas, guiek_cube_false_color)
 
+
 # Get the runtime state dictionary only once
 runtime_state = get_runtime_state()
 
@@ -65,14 +38,12 @@ _SETTINGS = {
     'drag_threshold': 5
 }
 
-
 def mouse_click_event(eventi):
     """Handle mouse click event (button 1 down)."""
 
     # Store data in case there will be a drag
     runtime_state['rect_x_0'] = eventi.xdata
     runtime_state['rect_y_0'] = eventi.ydata
-
 
 def mouse_release_event(eventi):
     """Handles Matplotlib mouse button release event.
@@ -101,7 +72,7 @@ def mouse_release_event(eventi):
             drag_end_x = int(max(x, x0))
             drag_end_y = int(max(y, y0))
 
-            print(f"Mouse drag from ({int(drag_start_x)},{int(drag_start_y)}) to ({int(drag_end_x)},{int(drag_end_y)}).")
+            # print(f"Mouse drag from ({int(drag_start_x)},{int(drag_start_y)}) to ({int(drag_end_x)},{int(drag_end_y)}).")
 
             rows = list(np.arange(start=drag_start_x, stop=drag_end_x, step=1))
             cols = list(np.arange(start=drag_start_y, stop=drag_end_y, step=1))
@@ -131,7 +102,7 @@ def mouse_release_event(eventi):
             runtime_state['rect_x_0'] = None
             runtime_state['rect_y_0'] = None
             pixel = runtime_state['img_array'][int(y), int(x)]
-            print(f"Mouse click at ({int(x)},{int(y)}).")
+            # print(f"Mouse click at ({int(x)},{int(y)}).")
             update_px_rgb_lines()
             update_px_plot(spectrum=pixel, x0=x, y0=y)
 
@@ -383,6 +354,15 @@ def update_false_color_canvas():
     runtime_state['fig_agg_false_color'].get_tk_widget().forget()
     # Clear axis object because if the next image is of different size,
     # it will break pixel indexing for mouse selection
+
+    w, h, ar = cube_dimensions(runtime_state['cube_data'])
+
+    new_canvas_w, new_canvas_h = get_false_color_canvas_size(aspect_ratio=ar, runtime_state=runtime_state)
+    if new_canvas_w != runtime_state['false_color_canvas_width'] or new_canvas_h != runtime_state['false_color_canvas_height']:
+        runtime_state['false_color_canvas_width'] = new_canvas_w
+        runtime_state['false_color_canvas_height'] = new_canvas_h
+        fig_false_color.set_size_inches(new_canvas_w, new_canvas_h, forward=True)
+
     ax_false_color.cla()
     ax_false_color.imshow(false_color_rgb)
     ax_false_color.set_xlabel('Samples', fontsize=axis_label_font_size)
@@ -477,12 +457,6 @@ def try_to_open_cube(path: str, mode: str):
             clear_plot()
             cube_meta(window[guiek_cube_meta_text], runtime_state=runtime_state)
 
-        # Connect mouse click if not connected
-        if not runtime_state['mouse_handlers_connected']:
-            cid_press = fig_false_color.canvas.mpl_connect('button_press_event', mouse_click_event)
-            cid_release = fig_false_color.canvas.mpl_connect('button_release_event', mouse_release_event)
-            runtime_state['mouse_handlers_connected'] = True
-
         # Draw cube to canvas
         update_false_color_canvas()
         update_band_wl_textblocks()
@@ -561,6 +535,9 @@ def main():
             print(f"No previous state found.")
 
         restore_from_previous_session()
+
+    cid_press = fig_false_color.canvas.mpl_connect('button_press_event', mouse_click_event)
+    cid_release = fig_false_color.canvas.mpl_connect('button_release_event', mouse_release_event)
 
     # Infinite GUI loop
     while True:

@@ -27,6 +27,9 @@ _RUNTIME_STATE = {
     'fig_agg_false_color': None,
     'pltFig': False,
 
+    'false_color_canvas_width': 0,
+    'false_color_canvas_height': 0,
+
     'cube_dir_path': None,
     'cube_is_reflectance': False, # If loaded cube is already reflectance we can disable all calculation stuff
     'cube_data': None,

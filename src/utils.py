@@ -90,3 +90,11 @@ def infer_runtime_RGB_value(value: str):
         raise
 
     return should_fill, parsed_int
+
+
+def cube_dimensions(cube: np.array):
+
+    width = cube.shape[1]
+    height = cube.shape[0]
+    aspect_ratio = width / height
+    return width, height, aspect_ratio

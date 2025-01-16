@@ -76,10 +76,7 @@ def find_cube(path: str, mode: str, save_state, runtime_state):
 
 
 def open_cube(hdr_path, data_path, mode, runtime_state):
-    """Opens a hyperspectral image cube.
-
-    Sets pixel plot axis from metadata if mode == 'cube'.
-    Connects mouse click handlers and updates the false color canvas.
+    """Opens a hyperspectral image cube and sets it into runtime state.
 
     :param hdr_path:
         Path to the ENVI header file.

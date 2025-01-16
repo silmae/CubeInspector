@@ -13,6 +13,11 @@ tick_label_font_size = 14
 save_resolution = 300
 """Save resolution for plots in dots per inch."""
 
+false_color_base_width = 7
+false_color_base_height = 6
+
+monitor_dpi = 96
+
 # Set Matplotlib to use TKinter backend apparently?
 matplotlib.use("TkAgg")
 
@@ -75,14 +80,8 @@ def initialize_ui():
     ax_px_plot.xaxis.set_tick_params(labelsize=tick_label_font_size)
     ax_px_plot.yaxis.set_tick_params(labelsize=tick_label_font_size)
 
-
     # False color imshow
-    fig_false_color = plt.figure(figsize=(6, 6), dpi=100)
-    ax_false_color = fig_false_color.add_subplot(111)
-
-    ax_false_color.xaxis.set_tick_params(labelsize=tick_label_font_size)
-    ax_false_color.yaxis.set_tick_params(labelsize=tick_label_font_size)
-
+    fig_false_color, ax_false_color = get_false_color_fig_and_ax(false_color_base_width, false_color_base_height)
 
     # Layout stuff #############
 
@@ -249,6 +248,38 @@ def initialize_ui():
     window.Maximize()
 
     return window, fig_px_plot, fig_false_color, ax_px_plot, ax_false_color
+
+
+def get_false_color_canvas_size(aspect_ratio, runtime_state):
+    """Get the size of the false color canvas according to the aspect ratio of the cube and the size of the window."""
+
+    w_size = runtime_state['window'].size
+    window_width_inch = w_size[0]/monitor_dpi
+    window_height_inch = w_size[1]/monitor_dpi
+    canvas_width_inch = window_width_inch / 3.5
+    canvas_height_inch = window_height_inch / 3
+
+    # print(f"Window width in px = {w_size[0]} and in inches = {w_size[0]/monitor_dpi}")
+    # print(f"Window height in px = {w_size[1]} and in inches = {w_size[1] / monitor_dpi}")
+
+    if aspect_ratio >= 1:
+        new_height = int(canvas_width_inch / aspect_ratio)
+        new_width = canvas_width_inch
+    else:
+        new_width = int(canvas_height_inch * aspect_ratio)
+        new_height = canvas_height_inch
+
+    return new_width, new_height
+
+
+def get_false_color_fig_and_ax(w,h):
+    fig_false_color = plt.figure(figsize=(w, h), dpi=100)
+    ax_false_color = fig_false_color.add_subplot(111)
+
+    ax_false_color.xaxis.set_tick_params(labelsize=tick_label_font_size)
+    ax_false_color.yaxis.set_tick_params(labelsize=tick_label_font_size)
+
+    return fig_false_color, ax_false_color
 
 
 def draw_figure(canvas, figure):
