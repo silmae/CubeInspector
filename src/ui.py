@@ -73,7 +73,7 @@ guiek_ylim_apply_button = "-YLIM APPLY-"
 
 
 def initialize_ui():
-    fig_px_plot = plt.figure(figsize=(5, 4), dpi=100)
+    fig_px_plot = plt.figure(figsize=(5, 5), dpi=100)
     ax_px_plot = fig_px_plot.add_subplot(111)
 
     # Pixel plot
@@ -245,7 +245,7 @@ def initialize_ui():
 
     # There if some flickering when clicking on the RGB image.
     # Also, I think the pixel plot size should not change with window size as it will be saved as-is.
-    window.Maximize()
+    # window.Maximize()
 
     return window, fig_px_plot, fig_false_color, ax_px_plot, ax_false_color
 

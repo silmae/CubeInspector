@@ -25,15 +25,6 @@ from src.utils import get_base_name_wo_postfix, img_array_to_rgb, infer_runtime_
 # TODO Gaussian or mean RGB.
 
 
-# Set Spectral Python library to support non-lowercase file names
-spy.settings.envi_support_nonlowercase_params = True
-
-window, fig_px_plot, fig_false_color, ax_px_plot, ax_false_color = initialize_ui()
-update_runtime_ui_components(window, fig_px_plot, fig_false_color, guiek_pixel_plot_canvas, guiek_cube_false_color)
-
-
-# Get the runtime state dictionary only once
-runtime_state = get_runtime_state()
 
 _SETTINGS = {
     'drag_threshold': 5
@@ -541,6 +532,9 @@ def main():
     cid_press = fig_false_color.canvas.mpl_connect('button_press_event', mouse_click_event)
     cid_release = fig_false_color.canvas.mpl_connect('button_release_event', mouse_release_event)
 
+    # """Enclose the whole GUI loop to try-except block to catch any errors and save state before closing down.
+    # This should be used only for executable as it makes debugging harder. """
+    # try:
     # Infinite GUI loop
     while True:
         event, values = window.read()
@@ -652,10 +646,23 @@ def main():
         # Update UI after every event is handled.
         update_UI_component_state(RUNTIME=runtime_state)
 
+    # Use this for executable
+    # except Exception as e:
+    #     sg.popup_error(f"An error occurred. Your state will be saved before closing down. \n"
+    #                    f"Error message:\n {e}")
+
     state_save()
     window.close()
 
 
 if __name__ == '__main__':
 
+    # Set Spectral Python library to support non-lowercase file names
+    spy.settings.envi_support_nonlowercase_params = True
+
+    window, fig_px_plot, fig_false_color, ax_px_plot, ax_false_color = initialize_ui()
+    update_runtime_ui_components(window, fig_px_plot, fig_false_color, guiek_pixel_plot_canvas, guiek_cube_false_color)
+
+    # Get the runtime state dictionary only once
+    runtime_state = get_runtime_state()
     main()
