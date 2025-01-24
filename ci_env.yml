@@ -12,6 +12,8 @@ dependencies:
   - toml
   - ipython
   - sphinx #API documentation
+  - scipy
+  - pytest
   - pip
   - pip:
       - spectral # for image cube read and write
