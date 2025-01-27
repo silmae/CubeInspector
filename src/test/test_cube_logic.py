@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
 from numpy.core.defchararray import title
+from numpy.ma.testutils import assert_almost_equal
 from scipy.ndimage import label
 from scipy.stats import mode
 import matplotlib.pyplot as plt
@@ -123,6 +124,88 @@ def create_white_cube(len_x: int, len_y: int, len_l: int, amplitude: int, start=
     white_cube = white_cube.astype(np.int32)
 
     return white_cube
+
+
+def distances_to_center(frame: np.array) -> np.array:
+    """Calculates distance of each pixel to the center of the frame normalized so that the max dist is 1.
+
+    Code adapted from stack overflow discussion:
+    From https://stackoverflow.com/questions/66412818/calculate-pixel-distance-from-centre-of-image
+
+    :param frame:
+        2D numpy array representing the frame.
+    :return:
+        2D numpy array representing the distances of each pixel to the center of the frame.
+    """
+
+    if len(frame.shape) != 2:
+        raise ValueError("The input frame must be 2 dimensional.")
+
+    center = np.array([(frame.shape[0]) / 2, (frame.shape[1]) / 2])
+    distances = np.linalg.norm(np.indices(frame.shape) - center[:, None, None] + 0.5, axis = 0)
+    dist_max = np.max(distances)
+    distances = distances / dist_max
+
+    return distances
+
+
+def kinda_wignetting(cube: np.array):
+
+    if len(cube.shape) == 3:
+        distances = distances_to_center(cube[:, :, 0])
+    elif len(cube.shape) == 2:
+        distances = distances_to_center(cube)
+    else:
+        raise ValueError("The input cube must be 2 or 3 dimensional.")
+
+    vignetting = (1 - distances) * 0.5
+    if len(cube.shape) == 3:
+        cube = np.swapaxes(cube, 0, 2)
+        cube = np.swapaxes(cube, 1, 2)
+        vignetted_cube = cube * vignetting
+        vignetted_cube = np.swapaxes(vignetted_cube, 1, 2)
+        vignetted_cube = np.swapaxes(vignetted_cube, 0, 2)
+    else:
+        vignetted_cube = cube * vignetting
+
+    vignetted_cube = vignetted_cube.astype(np.int32)
+    return vignetted_cube
+
+
+def create_signal_cube(len_x: int, len_y: int, len_l: int, amplitude: int, start=400, stop=2500):
+    """Generates a signal cube with len_l spectral points and len_x * len_y spatial points.
+
+    Axes order of the resulting cube is (x, y, l), where l is the spectral axis.
+
+    :param len_x:
+        Number of spatial points in the x direction. Setting this to 1 will create a single signal frame in y,l.
+    :param len_y:
+        Number of spatial points in the y direction. Setting this to 1 will create a single signal frame in x,l.
+    :param len_l:
+        Number of spectral points in the signal frame. Setting this to 1 will create a single signal frame in x,y.
+    :param amplitude:
+        Amplitude of the signal. The signal is a quarter of a sine wave with amplitude from 0 to amplitude.
+    :param start:
+        Start wavelength for the signal.
+    :param stop:
+        Stop wavelength for the signal
+    :return:
+        A signal cube.
+    """
+
+    signal_cube = np.zeros((len_x, len_y, len_l), dtype=np.int32)
+    half_amp = int(amplitude / 2)
+    sine_wave = create_wave(n=len_l, m=4, start=start, stop=stop, wave="sine")[1] * half_amp + half_amp
+    cosine_wave = create_wave(n=len_l, m=4, start=start, stop=stop, wave="cosine")[1] * half_amp + half_amp
+    for i in range(len_x):
+        for j in range(len_y):
+            if j > i:
+                signal_cube[i, j, :] = sine_wave
+            else:
+                signal_cube[i, j, :] = cosine_wave
+
+    signal_cube = signal_cube.astype(np.int32)
+    return signal_cube
 
 
 class TestCubeLogic(unittest.TestCase):
@@ -272,6 +355,68 @@ class TestCubeLogic(unittest.TestCase):
             plt.title("White cube middle pixel spectrum")
             plt.show()
 
+    def test_distances(self):
+        # Test that distances at corners are 1 and in the center 0
+        frame = np.zeros((3,3))
+        distances = distances_to_center(frame)
+        assert_almost_equal(distances[0][0], 1.0, decimal=16)
+        assert_almost_equal(distances[0][2], 1.0, decimal=16)
+        assert_almost_equal(distances[2][0], 1.0, decimal=16)
+        assert_almost_equal(distances[2][2], 1.0, decimal=16)
+        assert_almost_equal(distances[1][1], 0.0, decimal=16)
+
+        # Test that only 2D arrays are accepted
+        non_frame = np.zeros((2,2,2))
+        with self.assertRaises(ValueError):
+            distances_to_center(non_frame)
+        non_frame = np.zeros((2,))
+        with self.assertRaises(ValueError):
+            distances_to_center(non_frame)
+
+    def test_signal_cube(self):
+        len_x = 250
+        len_y = 200
+        len_l = 50
+        amplitude = 50000
+        start = 400
+        stop = 2000
+
+        signal_cube = create_signal_cube(len_x=len_x, len_y=len_y, len_l=len_l, amplitude=amplitude, start=start, stop=stop)
+        self.assertEqual(signal_cube.shape, (len_x, len_y, len_l))
+        self.assertTrue(signal_cube.dtype == np.int32)
+
+        if DEBUG:
+            plt.imshow(signal_cube[:, :, int(len_l * 0.5)])
+            plt.title("Signal cube middle frame")
+            plt.colorbar()
+            plt.show()
+            plt.close()
+
+            plt.plot(signal_cube[int(len_x/2), int(len_y/2), :])
+            plt.title("Signal cube middle pixel spectrum")
+            plt.show()
+
+    def test_vignetting(self):
+        len_x = 250
+        len_y = 200
+        len_l = 50
+        amplitude = 50000
+        start = 400
+        stop = 2000
+
+        signal_cube = create_signal_cube(len_x=len_x, len_y=len_y, len_l=len_l, amplitude=amplitude, start=start, stop=stop)
+        vignetted_cube = kinda_wignetting(signal_cube)
+
+        if DEBUG:
+            plt.imshow(vignetted_cube[:, :, int(len_l * 0.5)])
+            plt.title("Vignetted signal cube middle frame")
+            plt.colorbar()
+            plt.show()
+            plt.close()
+
+            plt.plot(vignetted_cube[int(len_x/2), int(len_y/2), :])
+            plt.title("Vignetted signal cube middle pixel spectrum")
+            plt.show()
 
     def test_dark_correction(self):
 
