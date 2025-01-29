@@ -1,5 +1,6 @@
 import numpy as np
 
+from scipy.stats import mode
 
 def dark_correction(cube: np.array, dark: np.array, axis):
     """Calculates dark correction for given cube.
@@ -22,8 +23,21 @@ def dark_correction(cube: np.array, dark: np.array, axis):
     if dark is None:
         raise ValueError(f"Cannot calculate dark because dark cube is None.")
 
-    dark_subtractable = np.median(dark, axis=axis)
-    cube = cube - dark_subtractable
+    dark_subtractable,_ = mode(dark, axis=axis)
+
+    if axis == 1:
+        cube = np.swapaxes(cube, 0, 1)
+        cube = cube - dark_subtractable
+        cube = np.swapaxes(cube, 0, 1)
+    elif axis == 2:
+        cube = np.swapaxes(cube, 0, 2)
+        cube = np.swapaxes(cube, 1, 2)
+        cube = cube - dark_subtractable
+        cube = np.swapaxes(cube, 1, 2)
+        cube = np.swapaxes(cube, 0, 2)
+    else:
+        cube = cube - dark_subtractable
+
     cube = np.clip(cube, a_min=0, a_max=None)
 
     return cube
