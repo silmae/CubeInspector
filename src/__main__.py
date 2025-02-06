@@ -245,6 +245,7 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
         #     print(f"{wl:.4} {spectrum[i]/s_max:.9}")
 
         ax_px_plot.set_xlabel('Band', fontsize=axis_label_font_size)
+        ax_px_plot.set_ylabel('Pixel value', fontsize=axis_label_font_size)
 
         def forward(x):
             return np.interp(x, bands, wls)
@@ -270,9 +271,9 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
         height = math.fabs(y0 - y1)
         runtime_state['fig_agg_false_color'].get_tk_widget().forget()
         if plot_color is not None:
-            handle = ax_false_color.add_patch(Rectangle((x0, y0), width=width, height=height, fill=False, edgecolor=plot_color))
+            handle = ax_false_color.add_patch(Rectangle((x0, y0), width=width, height=height, fill=False, edgecolor=plot_color, lw=2))
         else:
-            handle = ax_false_color.add_patch(Rectangle((x0, y0), width=width, height=height, fill=False, edgecolor='gray'))
+            handle = ax_false_color.add_patch(Rectangle((x0, y0), width=width, height=height, fill=False, edgecolor='gray', lw=2))
         runtime_state['rectangle_handles'].append(handle)
         runtime_state['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
 

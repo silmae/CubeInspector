@@ -6,9 +6,9 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 #### Plotting constants ####
 
-axis_label_font_size = 16
+axis_label_font_size = 25
 """Axis label font size"""
-tick_label_font_size = 14
+tick_label_font_size = 17
 """Tick label font size"""
 save_resolution = 300
 """Save resolution for plots in dots per inch."""
