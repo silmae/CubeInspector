@@ -1,5 +1,5 @@
 
-import PySimpleGUI as sg
+import FreeSimpleGUI as sg # https://github.com/spyoungtech/FreeSimpleGUI
 import matplotlib
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg

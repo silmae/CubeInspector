@@ -8,7 +8,7 @@ channels:
 dependencies:
   - python=3.12
   - numpy
-  - matplotlib
+  - matplotlib=3.9.2
   - toml
   - ipython
   - sphinx #API documentation
@@ -18,5 +18,5 @@ dependencies:
   - pip:
       - spectral # for image cube read and write
       #- spectres # for resampling spectra
-      - pysimplegui==4.60.5 #Force newest version (4.60.5) before they enforced subscribing to use 5.0 onwards.
+      - FreeSimpleGUI # PySimpleGUI went to propriatery, so we switched to open-source fork FreeSimpleGUI
       - pyinstaller
