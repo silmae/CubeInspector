@@ -37,25 +37,27 @@ def img_array_to_rgb(img_array: np.array, possible_R: str, possible_G: str, poss
 
     Take a histogram of the RGB image and use one of the bin edges near the end 
     to scale the pixel values down. This should let some of the brightest pixels (specular 
-    reflections) to clip so that they do not make the whole image too dark.              
+    reflections) to clip so that they do not make the whole image too dark. 
+    The scaling is skipped for multispectral images.
     """
 
-    logging.info(f"RGB image max value: {np.max(img_rgb)}, median: { np.median(img_rgb)}, mean: {np.mean(img_rgb)}")
+    if max_band > 10:
+        logging.info(f"RGB image max value: {np.max(img_rgb)}, median: { np.median(img_rgb)}, mean: {np.mean(img_rgb)}")
+        # Arbitrary bin count that seems to work OK
+        histogram, bin_edges = np.histogram(img_rgb, bins=6)
 
-    # Arbitrary bin count that seems to work OK
-    histogram, bin_edges = np.histogram(img_rgb, bins=10)
+        # Arbitrary selection of the cut point. Could be done better using the derivative of the histogram?
+        scale = bin_edges[-3]
 
-    # Arbitrary selection of the cut point. Could be done better using the derivative of the histogram?
-    scale = bin_edges[-3]
+        # Debugging print out of the bin edges in case the binning needs to be adjusted later.
+        # for i,bin_edge in enumerate(bin_edges):
+        #     if i > 0:
+        #         print(f"Bin edges: {bin_edge} val {histogram[i-1]}")
 
-    # Debugging print out of the bin edges in case the binning needs to be adjusted later.
-    # for i,bin_edge in enumerate(bin_edges):
-    #     if i > 0:
-    #         print(f"Bin edges: {bin_edge} val {histogram[i-1]}")
+        logging.info(f"I'll try to scale the RGB image down by {scale:.2f} before gamma correction.")
 
-    logging.info(f"I'll try to scale the RGB image down by {scale:.2f} before gamma correction.")
+        img_rgb = img_rgb / scale
 
-    img_rgb = img_rgb / scale
     img_rgb = np.sqrt(img_rgb)
 
     logging.info(f"RGB image after scaling; max value: {np.max(img_rgb)}, median: {np.median(img_rgb)}, mean: { np.mean(img_rgb)}")
