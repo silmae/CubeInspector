@@ -247,18 +247,18 @@ def update_px_plot(spectrum: np.array=None, std: np.array=None, x0=None, y0=None
         ax_px_plot.set_xlabel('Band', fontsize=axis_label_font_size)
         ax_px_plot.set_ylabel('Pixel value', fontsize=axis_label_font_size)
 
-        def forward(x):
-            return np.interp(x, bands, wls)
-
-        def inverse(x):
-            return np.interp(x, wls, bands)
-
-        # The ticks at the secondary axis are not perfect but good enough for now
-        secax = ax_px_plot.secondary_xaxis('top', functions=(forward, inverse))
-        secax.set_xticks(wls)
-        secax.xaxis.set_tick_params(labelsize=tick_label_font_size, rotation=70)
-        secax.set_xlabel(r"Wavelength [$nm$]", fontsize=axis_label_font_size)
-        runtime_state['sec_axes_px_plot'] = secax
+        # def forward(x):
+        #     return np.interp(x, bands, wls)
+        #
+        # def inverse(x):
+        #     return np.interp(x, wls, bands)
+        #
+        # # The ticks at the secondary axis are not perfect but good enough for now
+        # secax = ax_px_plot.secondary_xaxis('top', functions=(forward, inverse))
+        # secax.set_xticks(wls)
+        # secax.xaxis.set_tick_params(labelsize=tick_label_font_size, rotation=70)
+        # secax.set_xlabel(r"Wavelength [$nm$]", fontsize=axis_label_font_size)
+        # runtime_state['sec_axes_px_plot'] = secax
 
     if std is not None:
         ax_px_plot.fill_between(runtime_state['cube_bands'], spectrum - (std / 2), spectrum + (std / 2), alpha=0.2)
