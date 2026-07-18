@@ -2,7 +2,7 @@
 import os
 
 from src import toml_handling as TH
-from ui import draw_figure
+from src import ui
 
 # State dict save directory and filename
 state_dir_path = os.getcwd()
@@ -16,8 +16,8 @@ def get_save_state():
 
 def update_runtime_ui_components(window, fig_px_plot, fig_false_color, guiek_pixel_plot_canvas, guiek_cube_false_color):
     _RUNTIME_STATE['window'] = window
-    _RUNTIME_STATE['fig_agg_px_plot'] = draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
-    _RUNTIME_STATE['fig_agg_false_color'] = draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
+    _RUNTIME_STATE['fig_agg_px_plot'] = ui.draw_figure(window[guiek_pixel_plot_canvas].TKCanvas, fig_px_plot)
+    _RUNTIME_STATE['fig_agg_false_color'] = ui.draw_figure(window[guiek_cube_false_color].TKCanvas, fig_false_color)
 
 # Keep most of the global stuff in this single dictionary for later access
 _RUNTIME_STATE = {
