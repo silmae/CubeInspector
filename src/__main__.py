@@ -163,10 +163,12 @@ def update_band_wl_textblocks():
     band_keys = ['band_R', 'band_G', 'band_B']
     for i in range(3):
         should_fill, value = infer_runtime_RGB_value(runtime_state[band_keys[i]])
-        if not should_fill and runtime_state['cube_wls'] is not None:
-            runtime_state['window'][wl_textblock_keys[i]].update(f"{runtime_state['cube_wls'][value]:.2f} nm")
-        elif should_fill:
-            runtime_state['window'][wl_textblock_keys[i]].update(f"---.-- nm")
+        max_band = runtime_state['cube_bands'][-1]
+        if value < max_band and value >= 0:
+            if not should_fill and runtime_state['cube_wls'] is not None:
+                runtime_state['window'][wl_textblock_keys[i]].update(f"{runtime_state['cube_wls'][value]:.2f} nm")
+            elif should_fill:
+                runtime_state['window'][wl_textblock_keys[i]].update(f"---.-- nm")
 
 
 def update_spectral_clip_wl_text():
@@ -303,7 +305,11 @@ def update_false_color_canvas():
     possibly_R_str = str(runtime_state['band_R'])
     possibly_G_str = str(runtime_state['band_G'])
     possibly_B_str = str(runtime_state['band_B'])
-    meta_bands = [int(band) - 1 for band in runtime_state['cube_data'].metadata['default bands']]
+
+    try:
+        meta_bands = [int(band) - 1 for band in runtime_state['cube_data'].metadata['default bands']]
+    except KeyError: # if default bands not defined
+        meta_bands = [2, 1, 0]
 
     if len(possibly_R_str) == 0: # empty string
         possibly_R_str = str(meta_bands[0])
@@ -627,19 +633,56 @@ def main():
               event == guiek_r_input + "_Enter" or event == guiek_r_input + "KP_Enter" or
               event == guiek_g_input + "_Enter" or event == guiek_g_input + "KP_Enter" or
               event == guiek_b_input + "_Enter" or event == guiek_b_input + "KP_Enter"):
+
+            input_is_string = False
             try:
-                # Just try casting before continuing
-                _, _ = infer_runtime_RGB_value(values[guiek_r_input])
-                _, _ = infer_runtime_RGB_value(values[guiek_g_input])
-                _, _ = infer_runtime_RGB_value(values[guiek_b_input])
-                runtime_state['band_R'] = values[guiek_r_input] #int(values[guiek_r_input])
-                runtime_state['band_G'] = values[guiek_g_input] #int(values[guiek_g_input])
-                runtime_state['band_B'] = values[guiek_b_input] #int(values[guiek_b_input])
-                update_px_rgb_lines()
-                update_px_plot()
-                update_false_color_canvas()
-            except ValueError as ve:
-                print(f"WARNING: Failed casting band to an integer. False color image not updated.")
+                # Just try casting to an integer before continuing. If fails, it is a string and we should fill with something
+                int(values[guiek_r_input])
+                int(values[guiek_g_input])
+                int(values[guiek_b_input])
+            except:
+                print(f"Input can not be cast to int, treated as string")
+                input_is_string = True
+
+            if not input_is_string:
+                field_keys = [guiek_r_input, guiek_g_input, guiek_b_input]
+                max_band = runtime_state['cube_bands'][-1]
+                for key in field_keys:
+                    input_field_content = values[key]
+                    input_as_int = int(input_field_content)
+                    if input_as_int >= max_band or input_as_int < 0:
+                        # Not in valid range, so lets put back the old value
+                        print(f"Input {input_as_int} not in valid range. Refusing change.")
+                        if key == guiek_r_input:
+                            values[key] = runtime_state['band_R']
+                        elif key == guiek_g_input:
+                            values[key] = runtime_state['band_G']
+                        elif key == guiek_b_input:
+                            values[key] = runtime_state['band_B']
+                    else:
+                        if key == guiek_r_input:
+                            runtime_state['band_R'] = values[key]
+                        elif key == guiek_g_input:
+                            runtime_state['band_G'] = values[key]
+                        elif key == guiek_b_input:
+                            runtime_state['band_B'] = values[key]
+            else:
+                try:
+                    # Just try casting to an integer before continuing. If fails, it is a string and we should fill with something
+                    _, _ = infer_runtime_RGB_value(values[guiek_r_input])
+                    _, _ = infer_runtime_RGB_value(values[guiek_g_input])
+                    _, _ = infer_runtime_RGB_value(values[guiek_b_input])
+                    runtime_state['band_R'] = values[guiek_r_input]
+                    runtime_state['band_G'] = values[guiek_g_input]
+                    runtime_state['band_B'] = values[guiek_b_input]
+                    print(f"Input inferred as a fill value")
+                except ValueError as ve:
+                    print(f"Cannot infer string input as a fill value. For filling with constant input 'f0'")
+
+            # Whatever happened, update everything
+            update_px_rgb_lines()
+            update_px_plot()
+            update_false_color_canvas()
 
         else:
             print("We should not have arrived in here in the main loop iffing.")
