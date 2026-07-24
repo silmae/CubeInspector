@@ -158,15 +158,15 @@ def initialize_ui():
         [
             sg.Text("R"),
             sg.In(size=(5, 1), key=guiek_r_input,
-                  tooltip="Band used for the red channel in the false color representation of the cube."),
+                  tooltip="Band used for the red channel in the false color representation of the cube. You can input 'f0' to fill with zeroes."),
             sg.Text("---.-- nm", key=guiek_r_wl_text),
             sg.Text("G"),
             sg.In(size=(5, 1), key=guiek_g_input,
-                  tooltip="Band used for the green channel in the false color representation of the cube."),
+                  tooltip="Band used for the green channel in the false color representation of the cube. You can input 'f0' to fill with zeroes."),
             sg.Text("---.-- nm", key=guiek_g_wl_text),
             sg.Text("B"),
             sg.In(size=(5, 1), key=guiek_b_input,
-                  tooltip="Band used for the blue channel in the false color representation of the cube."),
+                  tooltip="Band used for the blue channel in the false color representation of the cube. You can input 'f0' to fill with zeroes."),
             sg.Text("---.-- nm", key=guiek_b_wl_text),
             sg.Button('Update', enable_events=True, key=guiek_rgb_update_button,
                       tooltip="Update false color image and pixel plot to represent the selected bands.")
