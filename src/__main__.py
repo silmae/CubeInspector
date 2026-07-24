@@ -306,10 +306,12 @@ def update_false_color_canvas():
     possibly_G_str = str(runtime_state['band_G'])
     possibly_B_str = str(runtime_state['band_B'])
 
+    meta_bands = [2, 1, 0]
     try:
+        # print(f"Setting default bands..")
         meta_bands = [int(band) - 1 for band in runtime_state['cube_data'].metadata['default bands']]
     except KeyError: # if default bands not defined
-        meta_bands = [2, 1, 0]
+        print(f"Default bands not found. Falling back to using the three first bands.")
 
     if len(possibly_R_str) == 0: # empty string
         possibly_R_str = str(meta_bands[0])
